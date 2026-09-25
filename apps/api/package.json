@@ -12,24 +12,25 @@
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
-    "fastify": "^4.28.0",
-    "@fastify/multipart": "^8.3.0",
     "@fastify/cors": "^10.0.0",
+    "@fastify/multipart": "^8.3.0",
     "@fastify/swagger": "^9.0.0",
     "@fastify/swagger-ui": "^5.0.0",
-    "bullmq": "^5.12.0",
-    "ioredis": "^5.4.0",
-    "zod": "^3.23.0",
-    "uuid": "^10.0.0",
-    "pino": "^9.0.0",
-    "@openbox/shared-types": "workspace:*",
     "@openbox/db": "workspace:*",
-    "@openbox/llm-provider": "workspace:*"
+    "@openbox/llm-provider": "workspace:*",
+    "@openbox/shared-types": "workspace:*",
+    "bullmq": "^5.12.0",
+    "fastify": "^4.28.0",
+    "ioredis": "^5.4.0",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.3.0",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "tsx": "^4.19.0",
     "@types/node": "^22.0.0",
-    "@types/uuid": "^10.0.0"
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.0"
   }
 }
