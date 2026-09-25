@@ -10,5 +10,5 @@ primary_region = "gru"
   PGDATA = "/var/lib/postgresql/data/pgdata"
 
 [mounts]
-  source = "pgdata"
+  source = "pgdata2"
   destination = "/var/lib/postgresql/data"
