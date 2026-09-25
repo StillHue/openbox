@@ -52,8 +52,8 @@ function DocumentRow({ document, onDelete }: { document: Document; onDelete: (id
         {document.judgeScore !== null ? (
           <>
             <span className={cn(
-              document.judgeScore >= 0.7 ? 'text-green-600' :
-              document.judgeScore >= 0.4 ? 'text-yellow-600' : 'text-red-600'
+              document.judgeScore >= 0.7 ? 'text-neutral-900' :
+              document.judgeScore >= 0.4 ? 'text-neutral-500' : 'text-neutral-400'
             )}>
               {Math.round(document.judgeScore * 100)}%
             </span>
@@ -94,7 +94,7 @@ function DocumentRow({ document, onDelete }: { document: Document; onDelete: (id
                   <Separator />
                   <DropdownMenuItem
                     onClick={() => onDelete(document.id)}
-                    className="text-red-600 focus:text-red-600"
+                    className="text-neutral-900 focus:text-neutral-900"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
                     Delete
@@ -295,7 +295,7 @@ export default function Documents() {
   if (error) {
     return (
       <div className="text-center py-12">
-        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <AlertCircle className="w-12 h-12 text-neutral-800 mx-auto mb-4" />
         <h2 className="text-xl font-semibold">Failed to load documents</h2>
         <p className="text-muted-foreground mt-2">{error.message}</p>
         <Button onClick={() => refetch()} className="mt-4">Retry</Button>

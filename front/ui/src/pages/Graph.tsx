@@ -19,18 +19,18 @@ const NODE_TYPES = [
 ] as const;
 
 const nodeTypeColors: Record<string, string> = {
-  Person: '#3b82f6',
-  Organization: '#8b5cf6',
-  Location: '#22c55e',
-  Concept: '#f59e0b',
-  Event: '#ef4444',
-  Product: '#06b6d4',
-  Technology: '#8b5cf6',
-  Project: '#ec4899',
+  Person: '#09090a',
+  Organization: '#27272a',
+  Location: '#3f3f46',
+  Concept: '#52525b',
+  Event: '#636366',
+  Product: '#71717a',
+  Technology: '#81818a',
+  Project: '#8e8e96',
   Document: '#64748b',
-  Date: '#a855f7',
-  Money: '#84cc16',
-  Other: '#94a3b8',
+  Date: '#a1a1aa',
+  Money: '#b6b6bc',
+  Other: '#d4d4d8',
 };
 
 function GraphCanvas({
@@ -90,14 +90,14 @@ function GraphCanvas({
                   'text-halign': 'center',
                   'font-size': '10px',
                   'font-family': 'Inter, system-ui, sans-serif',
-                  'color': '#1e293b',
+                  'color': '#09090a',
                   'text-outline-width': 2,
                   'text-outline-color': '#ffffff',
                   'background-color': (ele: any) => nodeTypeColors[ele.data('type')] || '#94a3b8',
                   'width': 'mapData(confidence, 0, 1, 20, 60)',
                   'height': 'mapData(confidence, 0, 1, 20, 60)',
                   'border-width': (ele: any) => ele.data('id') === selectedNodeId ? 3 : 1,
-                  'border-color': (ele: any) => ele.data('id') === selectedNodeId ? '#3b82f6' : '#ffffff',
+                  'border-color': (ele: any) => ele.data('id') === selectedNodeId ? '#09090a' : '#ffffff',
                   'border-opacity': 1,
                 },
               },
@@ -122,15 +122,15 @@ function GraphCanvas({
                 selector: 'node:selected',
                 style: {
                   'border-width': 3,
-                  'border-color': '#3b82f6',
+                  'border-color': '#09090a',
                   'border-opacity': 1,
                 },
               },
               {
                 selector: '.highlighted',
                 style: {
-                  'background-color': '#fef08a',
-                  'border-color': '#facc15',
+                  'background-color': '#e4e4e7',
+                  'border-color': '#52525b',
                   'border-width': 3,
                 },
               },
@@ -236,7 +236,7 @@ function GraphCanvas({
     cy.nodes().forEach((n: any) => {
       n.style({
         'border-width': n.data('id') === selectedNodeId ? 3 : 1,
-        'border-color': n.data('id') === selectedNodeId ? '#3b82f6' : '#ffffff',
+        'border-color': n.data('id') === selectedNodeId ? '#09090a' : '#ffffff',
       });
     });
   }, [nodes, edges, selectedNodeId]);
@@ -414,7 +414,7 @@ const handleTabChange = (value: string) => {
   if (error || !graph) {
     return (
       <div className="text-center py-12">
-        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <AlertCircle className="w-12 h-12 text-neutral-800 mx-auto mb-4" />
         <h2 className="text-xl font-semibold">Graph not found</h2>
         <p className="text-muted-foreground mt-2">{error?.message ?? 'Unknown error'}</p>
         <Button onClick={() => window.location.href = '/documents'} className="mt-4">

@@ -122,8 +122,8 @@ export default function Settings() {
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Globe className="w-5 h-5 text-blue-600" />
+                  <div className="w-10 h-10 bg-neutral-200 rounded-lg flex items-center justify-center">
+                    <Globe className="w-5 h-5 text-neutral-800" />
                   </div>
                   <div>
                     <h4 className="font-medium">Auto Refresh</h4>
@@ -241,8 +241,8 @@ export default function Settings() {
               <div className="p-4 bg-muted/50 rounded-lg">
                 <h4 className="font-medium mb-2">Connection Status</h4>
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="w-2 h-2 bg-green-500 rounded-full" />
-                  <span className="text-green-600">Connected to API</span>
+                  <span className="w-2 h-2 bg-neutral-900 rounded-full" />
+                  <span className="text-neutral-900">Connected to API</span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">Last checked: Just now</p>
               </div>
@@ -294,8 +294,8 @@ export default function Settings() {
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <Moon className="w-5 h-5 text-purple-600" />
+                  <div className="w-10 h-10 bg-neutral-200 rounded-lg flex items-center justify-center">
+                    <Moon className="w-5 h-5 text-neutral-800" />
                   </div>
                   <div>
                     <h4 className="font-medium">Compact Mode</h4>
@@ -340,8 +340,8 @@ export default function Settings() {
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                    <AlertCircle className="w-5 h-5 text-red-600" />
+                  <div className="w-10 h-10 bg-neutral-200 rounded-lg flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5 text-neutral-800" />
                   </div>
                   <div>
                     <h4 className="font-medium">Debug Mode</h4>
@@ -393,12 +393,12 @@ export default function Settings() {
 
               <Separator />
 
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="p-4 bg-neutral-100 border border-neutral-300 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                  <AlertCircle className="w-5 h-5 text-neutral-800 flex-shrink-0" />
                   <div>
-                    <h4 className="font-medium text-amber-900">Warning</h4>
-                    <p className="text-sm text-amber-800">
+                    <h4 className="font-medium text-neutral-900">Warning</h4>
+                    <p className="text-sm text-neutral-700">
                       Advanced settings can affect application stability. Only change these if you know what you're doing.
                     </p>
                   </div>

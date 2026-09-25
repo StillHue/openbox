@@ -177,7 +177,7 @@ export default function DocumentDetail() {
   if (error || !document) {
     return (
       <div className="text-center py-12">
-        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <AlertCircle className="w-12 h-12 text-neutral-800 mx-auto mb-4" />
         <h2 className="text-xl font-semibold">Document not found</h2>
         <p className="text-muted-foreground mt-2">{error?.message ?? 'Unknown error'}</p>
         <Button onClick={() => window.location.href = '/documents'} className="mt-4">
@@ -214,7 +214,7 @@ export default function DocumentDetail() {
               Chat
             </Link>
           </Button>
-          <Button variant="outline" onClick={handleDelete} className="text-red-600 hover:bg-red-50">
+          <Button variant="outline" onClick={handleDelete} className="text-neutral-900 hover:bg-neutral-100">
             <Settings className="w-4 h-4 mr-2" />
             Delete
           </Button>
