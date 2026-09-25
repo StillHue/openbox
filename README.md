@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="front/assets/logos/02-versao-negativa.png" alt="OpenBox" width="400">
+</p>
+
 # OpenBox - Document Ingestion and RAG Pipeline
 
 ## Overview
