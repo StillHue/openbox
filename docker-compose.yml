@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: openbox-postgres
+    environment:
+      POSTGRES_DB: openbox
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: openbox-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: openbox-api
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/openbox
+      - REDIS_URL=redis://redis:6379
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    container_name: openbox-worker
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/openbox
+      - REDIS_URL=redis://redis:6379
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/worker:/app/apps/worker
+      - ./packages:/app/packages
+    restart: unless-stopped
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: apps/mcp-server/Dockerfile
+    container_name: openbox-mcp-server
+    environment:
+      - OPENBOX_API_URL=http://api:3000
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
+      - ./apps/mcp-server:/app/apps/mcp-server
+      - ./packages:/app/packages
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

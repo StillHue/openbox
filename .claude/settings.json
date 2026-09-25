@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm init *)",
+      "Bash(pnpm install *)",
+      "Bash(pnpm approve-builds *)",
+      "Bash(pnpm run *)",
+      "Bash(pnpm --filter @openbox/mcp-server build)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm --filter @openbox/shared-types build)",
+      "Bash(pnpm --filter @openbox/llm-provider build)",
+      "Bash(pnpm --filter @openbox/md-pipeline build)",
+      "Bash(pnpm --filter @openbox/judge build)",
+      "Bash(pnpm --filter @openbox/db build)",
+      "Bash(pnpm --filter @openbox/api build)",
+      "Bash(pnpm --filter @openbox/worker build)",
+      "Bash(pnpm --filter @openbox/graph-engine build)",
+      "Bash(npx shadcn@latest mcp init --client claude)",
+      "Bash(npx shadcn@latest init -y)",
+      "Bash(npx shadcn@latest add button card input dialog textarea scroll-area tabs dropdown-menu avatar badge separator tooltip -y)",
+      "Bash(echo '{\"$schema\":\"https://ui.shadcn.com/schema.json\",\"style\":\"new-york\",\"rsc\":false,\"tsx\":true,\"tailwind\":{\"config\":\"tailwind.config.js\",\"css\":\"src/index.css\",\"baseColor\":\"slate\",\"cssVariables\":true,\"prefix\":\"\"},\"aliases\":{\"components\":\"@/components\",\"utils\":\"@/lib/utils\",\"ui\":\"@/components/ui\",\"lib\":\"@/lib\",\"hooks\":\"@/hooks\"},\"iconLibrary\":\"lucide\"}')",
+      "Bash(npx shadcn@latest add progress skeleton table select label checkbox switch -y)",
+      "Bash(pnpm add *)",
+      "Bash(pnpm list *)",
+      "Bash(pnpm dev *)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(cp -r packages front/)",
+      "Bash(cp -r packages back/)"
+    ]
+  }
+}

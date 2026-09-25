@@ -1,0 +1,29 @@
+{
+  "name": "@openbox/worker",
+  "version": "1.0.0",
+  "description": "OpenBox worker for document ingestion",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "bullmq": "^5.12.0",
+    "ioredis": "^5.4.0",
+    "zod": "^3.23.0",
+    "@openbox/shared-types": "workspace:*",
+    "@openbox/db": "workspace:*",
+    "@openbox/llm-provider": "workspace:*",
+    "@openbox/md-pipeline": "workspace:*",
+    "@openbox/judge": "workspace:*",
+    "@openbox/graph-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  }
+}

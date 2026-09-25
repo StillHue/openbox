@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    command: pnpm run --filter @openbox/api dev
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/openbox
+      - REDIS_URL=redis://redis:6379
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+    ports:
+      - "3000:3000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile.dev
+    command: pnpm run --filter @openbox/worker dev
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/openbox
+      - REDIS_URL=redis://redis:6379
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+    volumes:
+      - ./apps/worker:/app/apps/worker
+      - ./packages:/app/packages
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: apps/mcp-server/Dockerfile.dev
+    command: pnpm run --filter @openbox/mcp-server dev
+    environment:
+      - OPENBOX_API_URL=http://api:3000
+    volumes:
+      - ./apps/mcp-server:/app/apps/mcp-server
+      - ./packages:/app/packages
+    depends_on:
+      - api

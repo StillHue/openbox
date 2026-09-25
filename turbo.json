@@ -1,0 +1,26 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": []
+    },
+    "db:generate": {
+      "dependsOn": ["^build"]
+    },
+    "db:migrate": {
+      "dependsOn": ["^build"]
+    },
+    "db:studio": {
+      "cache": false
+    }
+  },
+  "globalEnv": ["MISTRAL_API_KEY", "DATABASE_URL", "REDIS_URL"]
+}

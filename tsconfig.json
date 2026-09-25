@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@openbox/shared-types": ["packages/shared-types/dist"],
+      "@openbox/llm-provider": ["packages/llm-provider/dist"],
+      "@openbox/md-pipeline": ["packages/md-pipeline/dist"],
+      "@openbox/judge": ["packages/judge/dist"],
+      "@openbox/db": ["packages/db/dist"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "build", "**/node_modules/**"]
+}
