@@ -1,0 +1,8 @@
+app = "openbox-worker"
+primary_region = "gru"
+
+[build]
+  dockerfile = "apps/worker/Dockerfile"
+
+[[vm]]
+  size = "shared-cpu-1x"

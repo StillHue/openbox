@@ -2,22 +2,17 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY pnpm-workspace.yaml ./
-COPY turbo.json ./
-
 # Install pnpm
-RUN npm install -g pnpm
+RUN npm install -g pnpm@11.1.2
 
-# Install dependencies
-RUN pnpm install --prod
-
-# Copy source code
+# Copy monorepo (respects .dockerignore)
 COPY . .
 
-# Build the application
-RUN pnpm run --filter @openbox/api build
+# Install all workspace deps (devDeps needed to build TS)
+RUN pnpm install
+
+# Build API + its workspace dependencies
+RUN pnpm --filter @openbox/api... --if-present build
 
 # Expose port
 EXPOSE 3000

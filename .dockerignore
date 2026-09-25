@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+.turbo
+.git
+.env
+.env.local
+*.log
+coverage
+apps/ui
+front/ui/dist

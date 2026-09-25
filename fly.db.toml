@@ -1,0 +1,13 @@
+app = "openbox-db"
+primary_region = "gru"
+
+[build]
+  image = "pgvector/pgvector:pg16"
+
+[env]
+  POSTGRES_DB = "openbox"
+  POSTGRES_USER = "postgres"
+
+[mounts]
+  source = "pgdata"
+  destination = "/var/lib/postgresql/data"

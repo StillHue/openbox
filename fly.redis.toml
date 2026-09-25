@@ -1,0 +1,9 @@
+app = "openbox-redis"
+primary_region = "gru"
+
+[build]
+  image = "redis:7-alpine"
+
+[mounts]
+  source = "redisdata"
+  destination = "/data"
