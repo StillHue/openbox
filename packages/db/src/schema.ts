@@ -115,7 +115,7 @@ export const vectorSearchSql = sql`
 export const hnswIndexSql = sql`
   CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw_idx
   ON chunks
-  USING hnsw ((embedding::vector) vector_cosine_ops)
+  USING hnsw ((embedding::vector(1024)) vector_cosine_ops)
   WITH (m = 16, ef_construction = 64);
 `;
 
