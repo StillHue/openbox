@@ -12,15 +12,15 @@
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
-    "@fastify/cors": "^10.0.0",
-    "@fastify/multipart": "^8.3.0",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/multipart": "^9.4.0",
     "@fastify/swagger": "^9.0.0",
     "@fastify/swagger-ui": "^5.0.0",
     "@openbox/db": "workspace:*",
     "@openbox/llm-provider": "workspace:*",
     "@openbox/shared-types": "workspace:*",
     "bullmq": "^5.12.0",
-    "fastify": "^4.28.0",
+    "fastify": "^5.12.5",
     "ioredis": "^5.4.0",
     "pino": "^9.0.0",
     "pino-pretty": "^11.3.0",
