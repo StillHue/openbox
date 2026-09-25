@@ -13,6 +13,7 @@
     "declaration": true,
     "declarationMap": true,
     "resolveJsonModule": true,
+    "noEmit": false,
     "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*"],
