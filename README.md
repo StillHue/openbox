@@ -15,8 +15,11 @@ OpenBox is a monorepo for document ingestion, processing, and retrieval-augmente
 - **API**: Fastify
 - **Queue**: BullMQ + Redis
 - **Database**: PostgreSQL + pgvector
-- **LLM Provider**: Vercel AI SDK with Mistral (embeddings)
+- **Embeddings**: NVIDIA NIM (Nemotron 3 Embed 1B)
+- **Answers**: OpenRouter (Nemotron Lightning / Nano 30B)
+- **Judging**: TypeSafe Jev or built-in classifier (per box)
 - **Document Processing**: mammoth (docx), unpdf (pdf), remark/unified (markdown parsing)
+- **UI**: Next.js (App Router) + shadcn/ui + Phosphor icons
 
 ## Project Structure
 
@@ -27,10 +30,13 @@ openbox/
 │   └── worker/        # BullMQ worker for ingestion pipeline
 ├── packages/
 │   ├── shared-types/  # Shared TypeScript types
-│   ├── llm-provider/  # LLM wrapper (Mistral embeddings)
+│   ├── llm-provider/  # LLM wrapper (NVIDIA embeddings, OpenRouter answers)
 │   ├── md-pipeline/   # Document conversion & chunking
-│   ├── judge/         # Document classification
+│   ├── judge/         # Document classification (Jev + classifier dispatch)
+│   ├── classifier/    # Open-source judge alternative (Noul/Choice/Score)
 │   └── db/            # Drizzle ORM schema & client
+├── front/
+│   └── ui/            # Next.js management UI
 ├── docker-compose.yml
 └── turbo.json
 ```
@@ -42,7 +48,7 @@ openbox/
 - Node.js 20+
 - pnpm 11+
 - Docker & Docker Compose
-- Mistral API key (for embeddings)
+- NVIDIA API key (for embeddings)
 
 ### 1. Clone and Install
 
@@ -55,7 +61,8 @@ pnpm install
 
 ```bash
 cp .env.example .env
-# Edit .env and add your MISTRAL_API_KEY
+# Edit .env and add your NVIDIA_API_KEY (embeddings),
+# OPENROUTER_API_KEY (answers) and JEV_API_KEY (judging)
 ```
 
 ### 3. Start Services
@@ -160,9 +167,9 @@ Vector similarity search.
 The worker processes documents through this pipeline:
 
 1. **Convert** → Markdown (PDF/DOCX/TXT)
-2. **Classify** → Judge LLM scores quality, category, topics
+2. **Classify** → Judge (Jev or classifier, per box) scores quality, category, topics
 3. **Chunk** → Semantic chunking with heading context
-4. **Embed** → Mistral embeddings (1024 dimensions)
+4. **Embed** → NVIDIA NIM embeddings (1024 dimensions)
 5. **Store** → PostgreSQL with pgvector index
 
 ## Development
@@ -206,14 +213,30 @@ pnpm lint
 
 ## Configuration
 
-Key environment variables:
+### Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MISTRAL_API_KEY` | - | Required for embeddings |
+| `NVIDIA_API_KEY` | - | Required for embeddings (NVIDIA NIM) |
+| `OPENROUTER_API_KEY` | - | Required for answer models |
+| `JEV_API_KEY` | - | Required for Jev judging |
+| `MISTRAL_API_KEY` | - | Optional (Mistral answer fallback) |
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/openbox` | PostgreSQL connection |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection |
 | `PORT` | `3000` | API server port |
+
+### Orchestration (account settings)
+
+The **Settings → Orchestration** tab (account-level, not per box) lets you:
+
+- Select a provider (NVIDIA NIM, OpenRouter, TypeSafe Jev)
+- Paste the provider API key (stored locally in the browser)
+- Pick default models for each role:
+  - **Embedding** — vectorization of documents and queries
+  - **Answer** — the chat/completion model
+  - **Judge** — quality gate: Jev (typed probabilities) or the built-in classifier (no extra API key, uses the box answer model)
+
+Each box can still override the three models in its own **Settings** tab, scoped to that box only.
 
 ## Next Phases
 

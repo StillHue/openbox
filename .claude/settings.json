@@ -27,7 +27,20 @@
       "Bash(curl -s http://localhost:8000/health)",
       "Bash(pkill -f \"vite\")",
       "Bash(cp -r packages front/)",
-      "Bash(cp -r packages back/)"
+      "Bash(cp -r packages back/)",
+      "Bash(curl -s -H \"Origin: http://localhost:5173\" -H \"Access-Control-Request-Method: GET\" -H \"Access-Control-Request-Headers: Content-Type\" -X OPTIONS https://openbox.fly.dev/documents)",
+      "Bash(curl -v -H \"Origin: http://localhost:5173\" -H \"Access-Control-Request-Method: GET\" -H \"Access-Control-Request-Headers: Content-Type\" -X OPTIONS https://openbox.fly.dev/documents)",
+      "Bash(curl -v -H \"Origin: http://localhost:5173\" -X GET https://openbox.fly.dev/documents)",
+      "Bash(curl -v -H \"Origin: http://localhost:5173\" -X GET https://openbox.fly.dev/health)",
+      "Bash(curl -v -H \"Origin: http://localhost:5173\" -X GET \"https://openbox.fly.dev/documents?limit=50&offset=0\")",
+      "Bash(flyctl ssh *)",
+      "Bash(echo \"Teste OpenBox RAG - documento de exemplo para popular o banco\")",
+      "Bash(curl -s -X POST https://openbox.fly.dev/documents -H \"Origin: http://localhost:5173\" -F \"file=@/tmp/teste.txt\")",
+      "Bash(curl -s -H \"Origin: http://localhost:5173\" \"https://openbox.fly.dev/documents?limit=50&offset=0\")",
+      "Bash(flyctl status *)",
+      "Bash(flyctl machine *)",
+      "Bash(flyctl deploy *)",
+      "Bash(docker build *)"
     ]
   }
 }

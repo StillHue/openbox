@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -7,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: openbox
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openbox-change-me}
     ports:
       - "5432:5432"
     volumes:
@@ -29,25 +27,42 @@ services:
       timeout: 3s
       retries: 5
 
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: openbox-migrate
+    command: pnpm --filter @openbox/db db:migrate
+    environment:
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-openbox-change-me}@postgres:5432/openbox
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: openbox-api
     ports:
-      - "3000:3000"
+      - "${API_PORT:-3000}:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/openbox
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-openbox-change-me}@postgres:5432/openbox
       - REDIS_URL=redis://redis:6379
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - API_BASE_URL=http://api:3000
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - PORT=3000
+      - HOST=0.0.0.0
+      - API_KEY=${API_KEY}
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     volumes:
-      - ./apps/api:/app/apps/api
-      - ./packages:/app/packages
+      - uploads_data:/tmp/uploads
     restart: unless-stopped
 
   worker:
@@ -56,17 +71,30 @@ services:
       dockerfile: apps/worker/Dockerfile
     container_name: openbox-worker
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/openbox
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-openbox-change-me}@postgres:5432/openbox
       - REDIS_URL=redis://redis:6379
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - API_BASE_URL=http://api:3000
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
-    volumes:
-      - ./apps/worker:/app/apps/worker
-      - ./packages:/app/packages
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: front/ui/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:${API_PORT:-3000}}
+    container_name: openbox-ui
+    ports:
+      - "${UI_PORT:-3001}:3000"
+    depends_on:
+      api:
+        condition: service_started
     restart: unless-stopped
 
   mcp-server:
@@ -79,10 +107,8 @@ services:
     depends_on:
       api:
         condition: service_started
-    volumes:
-      - ./apps/mcp-server:/app/apps/mcp-server
-      - ./packages:/app/packages
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  uploads_data:

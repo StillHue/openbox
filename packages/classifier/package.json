@@ -1,0 +1,30 @@
+{
+  "name": "@openbox/classifier",
+  "version": "1.0.0",
+  "description": "Original open-source typed-judgment classifier: Noul/Choice/Score primitives with code-owned gating",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "ai": "^4.0.0",
+    "zod": "^3.23.0",
+    "@openbox/llm-provider": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^22.0.0"
+  },
+  "license": "MIT"
+}

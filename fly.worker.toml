@@ -2,7 +2,10 @@ app = "openbox-worker"
 primary_region = "gru"
 
 [build]
-  dockerfile = "apps/worker/Dockerfile"
+  dockerfile = "apps/worker/Dockerfile.fly"
 
 [[vm]]
   size = "shared-cpu-1x"
+
+[env]
+  API_BASE_URL = "https://openbox.fly.dev"

@@ -1,8 +1,38 @@
 import { pgTable, uuid, text, timestamp, real, jsonb, integer, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
+export const boxes = pgTable('boxes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  description: text('description'),
+  embeddingModel: text('embedding_model').notNull().default('mistral-embed'),
+  answerModel: text('answer_model').notNull().default('mistral-small-latest'),
+  judgeModel: text('judge_model').notNull().default('jev-latest'),
+  autoRules: text('auto_rules').notNull().default('off'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const rules = pgTable(
+  'rules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    boxId: uuid('box_id')
+      .references(() => boxes.id, { onDelete: 'cascade' })
+      .notNull(),
+    content: text('content').notNull(),
+    source: text('source').notNull().default('auto'),
+    jevScore: real('jev_score'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    boxIdIdx: index('rules_box_id_idx').on(table.boxId),
+  })
+);
+
 export const documents = pgTable('documents', {
   id: uuid('id').primaryKey().defaultRandom(),
+  boxId: uuid('box_id').references(() => boxes.id, { onDelete: 'set null' }),
   filename: text('filename').notNull(),
   originalName: text('original_name').notNull(),
   mimeType: text('mime_type').notNull(),
@@ -124,6 +154,10 @@ export const enablePgvectorSql = sql`CREATE EXTENSION IF NOT EXISTS vector;`;
 
 export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
+export type Box = typeof boxes.$inferSelect;
+export type NewBox = typeof boxes.$inferInsert;
+export type Rule = typeof rules.$inferSelect;
+export type NewRule = typeof rules.$inferInsert;
 export type Chunk = typeof chunks.$inferSelect;
 export type NewChunk = typeof chunks.$inferInsert;
 export type Node = typeof nodes.$inferSelect;

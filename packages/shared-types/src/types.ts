@@ -6,6 +6,7 @@ export type IngestStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface Document {
   id: string;
+  boxId: string | null;
   filename: string;
   originalName: string;
   mimeType: string;
@@ -84,4 +85,52 @@ export interface DocumentUploadResponse {
 
 export interface DocumentStatusResponse extends Document {
   chunks?: Chunk[];
+}
+
+export interface Box {
+  id: string;
+  name: string;
+  description: string | null;
+  embeddingModel: string;
+  answerModel: string;
+  judgeModel: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateBoxRequest {
+  name: string;
+  description?: string;
+  embeddingModel?: string;
+  answerModel?: string;
+  judgeModel?: string;
+}
+
+export interface UpdateBoxRequest {
+  name?: string;
+  description?: string;
+  embeddingModel?: string;
+  answerModel?: string;
+  judgeModel?: string;
+}
+
+export interface AskRequest {
+  query: string;
+  topK?: number;
+}
+
+export interface AskSource {
+  documentId: string;
+  documentName: string;
+  chunkIndex: number;
+  content: string;
+  similarity: number;
+}
+
+export interface AskResponse {
+  answer: string;
+  model: string;
+  sources: AskSource[];
+  query: string;
+  tookMs: number;
 }

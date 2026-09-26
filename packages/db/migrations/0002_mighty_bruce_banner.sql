@@ -1,0 +1,1 @@
+ALTER TABLE "boxes" ADD COLUMN "judge_model" text DEFAULT 'jev-latest' NOT NULL;

@@ -6,3 +6,4 @@ allowBuilds:
   canvas: false
   esbuild: true
   msgpackr-extract: true
+  unrs-resolver: true

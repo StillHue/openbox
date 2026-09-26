@@ -8,6 +8,20 @@
       "when": 1790346461596,
       "tag": "0000_superb_orphan",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790380636707,
+      "tag": "0001_silly_sue_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790393861341,
+      "tag": "0002_mighty_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

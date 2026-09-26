@@ -1,0 +1,14 @@
+---
+description: Greetings and small talk get a direct reply, no repo exploration
+globs:
+alwaysApply: true
+---
+
+# Greetings and small talk
+
+Messages like "ping", "oi", "olá", "bom dia", "tudo bem?", "obrigado", "valeu"
+are conversation, not tasks:
+
+- Reply briefly and directly, in the user's language.
+- Do NOT read files, run Glob/Grep/Bash, or explore the repository for these.
+- Only use tools when the user asks for actual work.

@@ -8,7 +8,8 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
     }
   },
   "scripts": {
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@openbox/shared-types": "workspace:*",
+    "@types/node": "^22.0.0",
     "typescript": "^5.4.0"
   }
 }

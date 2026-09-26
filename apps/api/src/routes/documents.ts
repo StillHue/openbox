@@ -1,8 +1,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { v4 as uuidv4 } from 'uuid';
 import { IngestJobData } from '@openbox/shared-types';
-import { createIngestRepository } from '@openbox/db';
+import { createIngestRepository, createBoxRepository } from '@openbox/db';
 import * as fs from 'fs';
 
 const logger = {
@@ -31,18 +30,32 @@ export async function documentsRoutes(fastify: FastifyInstance) {
         const { filename, mimetype, encoding } = data;
         const buffer = await data.toBuffer();
 
-        // Save file temporarily
-        const tempFilePath = `/tmp/${uuidv4()}-${filename}`;
-        fs.writeFileSync(tempFilePath, buffer);
-
-        // Create document record
+        // Create document record first so the id is known
         const ingestRepo = createIngestRepository(fastify.db);
+        const { boxId } = request.query as { boxId?: string };
+
+        let boxIdValue: string | null = null;
+        if (boxId !== undefined) {
+          const box = await createBoxRepository(fastify.db).findById(boxId);
+          if (!box) {
+            return reply.code(400).send({ error: 'Box not found' });
+          }
+          boxIdValue = box.id;
+        }
+
         const document = await ingestRepo.createDocument({
+          boxId: boxIdValue,
           filename,
           originalName: filename,
           mimeType: mimetype,
           status: 'pending',
         });
+
+        // Save file where GET /documents/:id/file expects it
+        // (matches the /tmp/uploads volume mount on Fly)
+        fs.mkdirSync('/tmp/uploads', { recursive: true });
+        const tempFilePath = `/tmp/uploads/${document.id}-${filename}`;
+        fs.writeFileSync(tempFilePath, buffer);
 
         // Enqueue ingestion job
         const queue = fastify.queue;
@@ -54,10 +67,10 @@ export async function documentsRoutes(fastify: FastifyInstance) {
         };
 
         await queue.add('ingest', jobData, {
-          attempts: 3,
+          attempts: 5,
           backoff: {
             type: 'exponential',
-            delay: 1000,
+            delay: 30000,
           },
         });
 
@@ -98,15 +111,83 @@ export async function documentsRoutes(fastify: FastifyInstance) {
     '/documents',
     async (request: FastifyRequest, reply) => {
       try {
-        const query = request.query as { limit?: string; offset?: string };
+        const query = request.query as { limit?: string; offset?: string; boxId?: string; unassigned?: string };
         const limit = Number(query.limit) || 50;
         const offset = Number(query.offset) || 0;
         const ingestRepo = createIngestRepository(fastify.db);
+
+        if (query.boxId !== undefined) {
+          const documents = await ingestRepo.listByBox(query.boxId, limit, offset);
+          return reply.send(documents);
+        }
+
+        if (query.unassigned === 'true') {
+          const documents = await ingestRepo.listUnassigned(limit, offset);
+          return reply.send(documents);
+        }
+
         const documents = await ingestRepo.list(limit, offset);
 
         return reply.send(documents);
       } catch (error) {
         logger.error('Error listing documents:', { error: String(error) });
+        return reply.code(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  fastify.delete(
+    '/documents/:id',
+    async (request: FastifyRequest, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const ingestRepo = createIngestRepository(fastify.db);
+        const document = await ingestRepo.getDocument(id);
+
+        if (!document) {
+          return reply.code(404).send({ error: 'Document not found' });
+        }
+
+        // Remove file from disk (best effort)
+        try {
+          fs.unlinkSync(`/tmp/uploads/${id}-${document.filename}`);
+        } catch {
+          // Ignore missing files
+        }
+
+        // Cascades to chunks, nodes and edges
+        await ingestRepo.deleteDocument(id);
+
+        return reply.code(204).send();
+      } catch (error) {
+        logger.error('Error deleting document:', { error: String(error) });
+        return reply.code(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  // Serve file content for worker download
+  fastify.get(    '/documents/:id/file',
+    async (request: FastifyRequest, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const ingestRepo = createIngestRepository(fastify.db);
+        const document = await ingestRepo.getDocument(id);
+
+        if (!document) {
+          return reply.code(404).send({ error: 'Document not found' });
+        }
+
+        // File is stored in /tmp/uploads/{documentId}-{filename}
+        const filePath = `/tmp/uploads/${id}-${document.filename}`;
+        try {
+          const file = await import('fs/promises').then(fs => fs.readFile(filePath));
+          return reply.type(document.mimeType).send(file);
+        } catch {
+          return reply.code(404).send({ error: 'File not found on disk' });
+        }
+      } catch (error) {
+        logger.error('Error serving document file:', { error: String(error) });
         return reply.code(500).send({ error: 'Internal server error' });
       }
     }
