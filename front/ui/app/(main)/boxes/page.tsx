@@ -15,10 +15,13 @@ import {
   useCreateBox,
   useDeleteBox,
   useModelCatalog,
+  useProviderModelList,
   useUnassignedDocuments,
   useDeleteDocument,
 } from "@/hooks/useApi";
+import type { ProviderModelOption } from "@/types";
 import { loadOrchestrationSettings } from "@/lib/orchestration";
+import { toast, errorMessage } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -60,9 +63,14 @@ function CreateBoxDialog({
   const [embeddingModel, setEmbeddingModel] = useState("");
   const [answerModel, setAnswerModel] = useState("");
   const [judgeModel, setJudgeModel] = useState("");
+  const [provider, setProvider] = useState("");
+  const [providerKey, setProviderKey] = useState("");
   const providerLabel = (id: string) =>
     catalog?.providers.find((p) => p.id === id)?.label ?? id;
   const createMutation = useCreateBox();
+
+  // Live model list for the chosen provider (server key used as fallback).
+  const { data: liveModels } = useProviderModelList(provider || undefined, providerKey || undefined);
 
   // Pre-select the account-level orchestration defaults (Settings → Orchestration)
   useEffect(() => {
@@ -71,26 +79,44 @@ function CreateBoxDialog({
     setEmbeddingModel(settings.defaultEmbeddingModel || "");
     setAnswerModel(settings.defaultAnswerModel || "");
     setJudgeModel(settings.defaultJudgeModel || "");
+    setProvider(settings.selectedProvider || "");
+    setProviderKey(settings.apiKeys?.[settings.selectedProvider] || "");
   }, [open]);
+
+  // Live listing wins; static catalog is the fallback.
+  const embedOptions: ProviderModelOption[] = liveModels
+    ? liveModels.embed.map((m) => ({ ...m, id: `${provider}:${m.id}` }))
+    : (catalog?.embeddingModels ?? []).map((m) => ({ id: m.id, label: m.label, type: "embed" as const }));
+  const answerOptions: ProviderModelOption[] = liveModels
+    ? liveModels.answer.map((m) => ({ ...m, id: `${provider}:${m.id}` }))
+    : (catalog?.answerModels ?? []).map((m) => ({ id: m.id, label: m.label, type: "answer" as const }));
 
   const handleCreate = async () => {
     if (!name.trim()) return;
+    const boxName = name.trim();
     try {
-      await createMutation.mutateAsync({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        embeddingModel: embeddingModel || undefined,
-        answerModel: answerModel || undefined,
-        judgeModel: judgeModel || undefined,
-      });
+      await toast.promise(
+        createMutation.mutateAsync({
+          name: boxName,
+          description: description.trim() || undefined,
+          embeddingModel: embeddingModel || undefined,
+          answerModel: answerModel || undefined,
+          judgeModel: judgeModel || undefined,
+        }),
+        {
+          loading: { title: "Criando box…" },
+          success: `Box "${boxName}" criado.`,
+          error: (e) => errorMessage(e),
+        },
+      );
       onClose();
       setName("");
       setDescription("");
       setEmbeddingModel("");
       setAnswerModel("");
       setJudgeModel("");
-    } catch (error) {
-      console.error("Create box failed:", error);
+    } catch {
+      // Reported by the toast; keep the dialog open for a retry.
     }
   };
 
@@ -124,6 +150,35 @@ function CreateBoxDialog({
             />
           </div>
           <div className="space-y-2">
+            <Label>Provider</Label>
+            <Select
+              value={provider || undefined}
+              onValueChange={(v) => {
+                setProvider(v);
+                setEmbeddingModel("");
+                setAnswerModel("");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent>
+                {(catalog?.dynamicProviders ?? []).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {liveModels
+                ? `${liveModels.embed.length} embedding · ${liveModels.answer.length} answer models`
+                : catalog?.dynamicProviders.length
+                  ? "Pick a provider to list its models"
+                  : ""}
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label>Embedding model</Label>
             <Select value={embeddingModel || undefined} onValueChange={setEmbeddingModel}>
               <SelectTrigger>
@@ -133,10 +188,9 @@ function CreateBoxDialog({
               </SelectTrigger>
               <SelectContent>
                 {[
-                  ...(catalog?.embeddingModels ?? []),
-                  ...(embeddingModel &&
-                  !(catalog?.embeddingModels ?? []).some((m) => m.id === embeddingModel)
-                    ? [{ id: embeddingModel, label: embeddingModel }]
+                  ...embedOptions,
+                  ...(embeddingModel && !embedOptions.some((m) => m.id === embeddingModel)
+                    ? [{ id: embeddingModel, label: embeddingModel, type: "embed" as const }]
                     : []),
                 ].map((m) => (
                   <SelectItem key={m.id} value={m.id}>
@@ -156,10 +210,9 @@ function CreateBoxDialog({
               </SelectTrigger>
               <SelectContent>
                 {[
-                  ...(catalog?.answerModels ?? []),
-                  ...(answerModel &&
-                  !(catalog?.answerModels ?? []).some((m) => m.id === answerModel)
-                    ? [{ id: answerModel, label: answerModel }]
+                  ...answerOptions,
+                  ...(answerModel && !answerOptions.some((m) => m.id === answerModel)
+                    ? [{ id: answerModel, label: answerModel, type: "answer" as const }]
                     : []),
                 ].map((m) => (
                   <SelectItem key={m.id} value={m.id}>
@@ -241,10 +294,14 @@ function BoxesContent() {
   const handleDeleteDoc = async (id: string, name: string) => {
     if (confirm(`Delete unassigned document "${name}"?`)) {
       try {
-        await deleteDocMutation.mutateAsync(id);
+        await toast.promise(deleteDocMutation.mutateAsync(id), {
+          loading: { title: `Deletando "${name}"…` },
+          success: `"${name}" removida.`,
+          error: (e) => errorMessage(e),
+        });
         refetchUnassigned();
-      } catch (error) {
-        console.error("Delete failed:", error);
+      } catch {
+        // Reported by the toast.
       }
     }
   };
@@ -254,10 +311,14 @@ function BoxesContent() {
       confirm(`Delete box "${name}"? Documents stay but become unassigned.`)
     ) {
       try {
-        await deleteMutation.mutateAsync(id);
+        await toast.promise(deleteMutation.mutateAsync(id), {
+          loading: { title: `Deletando box "${name}"…` },
+          success: `Box "${name}" deletado.`,
+          error: (e) => errorMessage(e),
+        });
         refetch();
-      } catch (error) {
-        console.error("Delete failed:", error);
+      } catch {
+        // Reported by the toast.
       }
     }
   };

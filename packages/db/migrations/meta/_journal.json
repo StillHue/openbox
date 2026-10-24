@@ -22,6 +22,34 @@
       "when": 1790393861341,
       "tag": "0002_mighty_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790777571590,
+      "tag": "0003_lying_shadowcat",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790786336736,
+      "tag": "0004_tiresome_bromley",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790790000000,
+      "tag": "0005_repair_auto_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0006_lightrag_graph",
+      "breakpoints": true
     }
   ]
 }

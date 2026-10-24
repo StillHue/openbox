@@ -15,7 +15,43 @@ import type {
   ProviderModelsResponse,
   AskResponse,
   BoxGraph,
+  ApiKeyInfo,
+  CreateApiKeyResponse,
+  AuthLoginResponse,
+  AuthStatusResponse,
+  AuthUser,
 } from '../types';
+
+export const OPENBOX_AUTH_TOKEN_STORAGE_KEY = 'openbox.authToken';
+const LEGACY_API_KEY_STORAGE_KEY = 'openbox.apiKey';
+
+export function loadAuthToken(): string {
+  if (typeof window === 'undefined') return '';
+  const current = window.localStorage.getItem(OPENBOX_AUTH_TOKEN_STORAGE_KEY);
+  if (current) return current;
+  // One-time migration from the previous API-key storage.
+  const legacy = window.localStorage.getItem(LEGACY_API_KEY_STORAGE_KEY);
+  if (legacy) {
+    window.localStorage.setItem(OPENBOX_AUTH_TOKEN_STORAGE_KEY, legacy);
+    window.localStorage.removeItem(LEGACY_API_KEY_STORAGE_KEY);
+    return legacy;
+  }
+  return '';
+}
+
+export function saveAuthToken(token: string) {
+  if (typeof window === 'undefined') return;
+  if (token) {
+    window.localStorage.setItem(OPENBOX_AUTH_TOKEN_STORAGE_KEY, token);
+  } else {
+    window.localStorage.removeItem(OPENBOX_AUTH_TOKEN_STORAGE_KEY);
+  }
+}
+
+/** Backwards-compatible aliases (token replaced the raw key). */
+export const OPENBOX_API_KEY_STORAGE_KEY = OPENBOX_AUTH_TOKEN_STORAGE_KEY;
+export const loadOpenboxApiKey = loadAuthToken;
+export const saveOpenboxApiKey = saveAuthToken;
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || '/api',
@@ -24,10 +60,39 @@ const api = axios.create({
   },
 });
 
+// Attach the user's OpenBox API key (obk_...) to every request, when set.
+api.interceptors.request.use((config) => {
+  const key = loadOpenboxApiKey();
+  if (key) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${key}`;
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiError>) => {
+    // Expired/revoked key: drop it and bounce to login (browser only,
+    // never from the login page itself to avoid redirect loops).
+    if (
+      error.response?.status === 401 &&
+      typeof window !== 'undefined' &&
+      !window.location.pathname.startsWith('/login')
+    ) {
+      saveOpenboxApiKey('');
+      window.location.href = '/login';
+    }
+    // Log full error for debugging
+    console.error('API Error:', error);
     const message = error.response?.data?.error ?? error.message ?? 'An error occurred';
+    // If we have more details from response data, include them
+    if (error.response?.data) {
+      const details = error.response.data;
+      if (details.details) {
+        return Promise.reject(new Error(`${message}\nDetails: ${JSON.stringify(details.details)}`));
+      }
+    }
     return Promise.reject(new Error(message));
   }
 );
@@ -53,6 +118,9 @@ export const documentsApi = {
 
   delete: (id: string) =>
     api.delete(`/documents/${id}`).then((r) => r.data),
+
+  reprocess: (id: string) =>
+    api.post<{ ok: boolean }>(`/documents/${id}/reprocess`).then((r) => r.data),
 };
 
 export const queryApi = {
@@ -111,6 +179,44 @@ export const modelsApi = {
   providerModels: (provider: string, apiKey?: string) =>
     api
       .post<ProviderModelsResponse>('/providers/models', { provider, apiKey })
+      .then((r) => r.data),
+};
+
+export const apiKeysApi = {
+  list: () =>
+    api.get<ApiKeyInfo[]>('/api-keys').then((r) => r.data),
+
+  create: (name: string) =>
+    api.post<CreateApiKeyResponse>('/api-keys', { name }).then((r) => r.data),
+
+  revoke: (id: string) =>
+    api.delete(`/api-keys/${id}`).then((r) => r.data),
+};
+
+export const authApi = {
+  /** First-run check: true when no account exists yet. Public. */
+  status: () =>
+    api.get<AuthStatusResponse>('/auth/status').then((r) => r.data),
+
+  /** Create the first account (or with master key afterwards). Public. */
+  register: (email: string, password: string, name?: string) =>
+    api.post<AuthLoginResponse>('/auth/register', { email, password, name }).then((r) => r.data),
+
+  /** Email + password login. Public. */
+  login: (email: string, password: string) =>
+    api.post<AuthLoginResponse>('/auth/login', { email, password }).then((r) => r.data),
+
+  /** The signed-in account. Requires a session JWT. */
+  me: () => api.get<AuthLoginResponse>('/auth/me').then((r) => r.data),
+
+  /** Update the display name. Email is immutable (it is the login id). */
+  updateProfile: (name: string | null) =>
+    api.patch<AuthLoginResponse>('/auth/me', { name }).then((r) => r.data),
+
+  /** Change password; returns a fresh token so the session survives. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api
+      .post<AuthLoginResponse>('/auth/password', { currentPassword, newPassword })
       .then((r) => r.data),
 };
 

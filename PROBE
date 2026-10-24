@@ -1,0 +1,199 @@
+#!/usr/bin/env node
+/**
+ * PROBE — OpenBox stack diagnostic probe.
+ *
+ * Usage:
+ *   node PROBE              # full probe
+ *   node PROBE --quiet      # only failures
+ *
+ * Exit code: 0 = all required checks passed, 1 = at least one failure.
+ * Zero dependencies: uses only node builtins (net, http, fs).
+ */
+
+import { createConnection } from "node:net";
+import { request } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { readFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const QUIET = process.argv.includes("--quiet");
+
+/* ------------------------------------------------------------------ env --- */
+
+function loadEnvFile() {
+  const file = join(ROOT, ".env");
+  if (!existsSync(file)) return;
+  for (const raw of readFileSync(file, "utf8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    const value = line
+      .slice(eq + 1)
+      .trim()
+      .replace(/^["']|["']$/g, "");
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+
+loadEnvFile();
+
+/* -------------------------------------------------------------- reporter --- */
+
+const results = [];
+
+function record(ok, name, detail) {
+  results.push({ ok, name, detail });
+  if (QUIET && ok) return;
+  const tag = ok ? "PASS" : "FAIL";
+  const line = `[${tag}] ${name}${detail ? ` — ${detail}` : ""}`;
+  console.log(ok ? `  ${line}` : line);
+}
+
+function section(title) {
+  if (QUIET) return;
+  console.log(`\n${title}`);
+  console.log("-".repeat(title.length));
+}
+
+/* ---------------------------------------------------------------- checks --- */
+
+function tcpProbe(host, port, timeout = 3000) {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host, port });
+    const done = (ok, detail) => {
+      socket.destroy();
+      resolve({ ok, detail });
+    };
+    socket.setTimeout(timeout);
+    socket.once("connect", () => done(true, `${host}:${port} open`));
+    socket.once("timeout", () => done(false, `${host}:${port} timeout`));
+    socket.once("error", (err) => done(false, `${host}:${port} ${err.code ?? err.message}`));
+  });
+}
+
+function httpProbe(url, { method = "GET", headers = {}, body, timeout = 5000 } = {}) {
+  return new Promise((resolve) => {
+    const send = url.startsWith("https") ? httpsRequest : request;
+    const req = send(
+      url,
+      { method, headers, timeout },
+      (res) => {
+        let payload = "";
+        res.on("data", (c) => (payload += c));
+        res.on("end", () =>
+          resolve({ ok: res.statusCode < 400, status: res.statusCode, body: payload.slice(0, 200) }),
+        );
+      },
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({ ok: false, status: 0, body: "timeout" });
+    });
+    req.on("error", (err) => resolve({ ok: false, status: 0, body: err.code ?? err.message }));
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+function urlParts(raw, fallbackProtocol = "postgresql:") {
+  try {
+    const u = new URL(raw);
+    const protocol = u.protocol === "redis:" ? "redis:" : fallbackProtocol;
+    const port = u.port ? Number(u.port) : protocol === "redis:" ? 6379 : 5432;
+    return { host: u.hostname, port, protocol };
+  } catch {
+    return null;
+  }
+}
+
+function mask(value) {
+  if (!value) return null;
+  return value.length <= 8 ? "***" : `${value.slice(0, 4)}...${value.slice(-2)}`;
+}
+
+/* ------------------------------------------------------------------ main --- */
+
+async function main() {
+  if (!QUIET) console.log("OpenBox PROBE — stack diagnostic");
+
+  section("Environment");
+  const requiredKeys = ["DATABASE_URL", "REDIS_URL"];
+  const providerKeys = [
+    "MISTRAL_API_KEY",
+    "NVIDIA_API_KEY",
+    "OPENROUTER_API_KEY",
+    "TYPESAFE_API_KEY",
+  ];
+
+  record(existsSync(join(ROOT, ".env")), ".env present", existsSync(join(ROOT, ".env")) ? "" : "copy .env.example");
+
+  for (const key of requiredKeys) {
+    const value = process.env[key];
+    record(Boolean(value), `env ${key}`, value ? "" : "missing");
+  }
+
+  const configuredProviders = providerKeys.filter((k) => process.env[k]);
+  record(
+    configuredProviders.length > 0,
+    "env provider keys",
+    configuredProviders.length ? configuredProviders.map((k) => `${k}=${mask(process.env[k])}`).join(" ") : "none set",
+  );
+
+  section("Datastores");
+  const db = urlParts(process.env.DATABASE_URL ?? "");
+  if (!db) {
+    record(false, "postgres reachable", "DATABASE_URL is not a valid URL");
+  } else {
+    const res = await tcpProbe(db.host, db.port);
+    record(res.ok, "postgres reachable", res.detail);
+  }
+
+  const redis = urlParts(process.env.REDIS_URL ?? "", "redis:");
+  if (!redis) {
+    record(false, "redis reachable", "REDIS_URL is not a valid URL");
+  } else {
+    const res = await tcpProbe(redis.host, redis.port);
+    record(res.ok, "redis reachable", res.detail);
+  }
+
+  section("Services");
+  const port = process.env.PORT ?? "3000";
+  const host = process.env.HOST && process.env.HOST !== "0.0.0.0" ? process.env.HOST : "localhost";
+  const health = await httpProbe(`http://${host}:${port}/health`);
+  record(health.ok, "api /health", health.ok ? `HTTP ${health.status}` : `HTTP ${health.status} ${health.body}`);
+
+  const query = await httpProbe(`http://${host}:${port}/documents?limit=1`, {
+    headers: process.env.API_KEY ? { "x-api-key": process.env.API_KEY } : {},
+  });
+  record(
+    query.ok,
+    "api GET /documents",
+    query.ok ? `HTTP ${query.status}` : `HTTP ${query.status} ${query.body}`,
+  );
+
+  const failed = results.filter((r) => !r.ok);
+  const required = results.filter((r) => r.name !== "env provider keys" && !r.name.startsWith("api GET"));
+
+  if (!QUIET) {
+    section("Summary");
+    console.log(`  total:   ${results.length}`);
+    console.log(`  passed:  ${results.length - failed.length}`);
+    console.log(`  failed:  ${failed.length}`);
+    if (failed.length) {
+      console.log("\n  failing checks:");
+      for (const f of failed) console.log(`   - ${f.name}: ${f.detail}`);
+    }
+  }
+
+  const hardFailures = required.filter((r) => !r.ok);
+  process.exitCode = hardFailures.length > 0 ? 1 : 0;
+}
+
+main().catch((err) => {
+  console.error("PROBE crashed:", err);
+  process.exitCode = 1;
+});

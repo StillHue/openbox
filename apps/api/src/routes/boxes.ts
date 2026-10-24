@@ -1,9 +1,10 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { createBoxRepository, createDocumentRepository, createQueryRepository, createChunkRepository } from '@openbox/db';
+import { createBoxRepository, createChunkRepository, createDocumentRepository, createQueryRepository, createNodeRepository, createEdgeRepository } from '@openbox/db';
 import {
   generateAnswer,
   generateEmbedding,
+  generateEmbeddings,
   EMBEDDING_MODELS,
   ANSWER_MODELS,
   JUDGE_MODELS,
@@ -76,7 +77,9 @@ export async function boxesRoutes(fastify: FastifyInstance) {
 
   /**
    * List a provider's models live, using a user-supplied API key.
-   * The key is used transiently for this request only — never stored or logged.
+   * Falls back to the server's own key for that provider (env), so listing
+   * works without pasting keys. Keys are used transiently for this request
+   * only — never stored or logged.
    */
   fastify.post('/providers/models', async (request: FastifyRequest, reply) => {
     const parsed = listProviderModelsSchema.safeParse(request.body);
@@ -88,11 +91,12 @@ export async function boxesRoutes(fastify: FastifyInstance) {
     if (!info) {
       return reply.code(400).send({ error: `Unknown provider: ${provider}` });
     }
-    if (!apiKey && !info.publicListing) {
+    const effectiveKey = apiKey ?? process.env[info.keyEnv];
+    if (!effectiveKey && !info.publicListing) {
       return reply.code(400).send({ error: `An API key is required to list ${info.label} models` });
     }
     try {
-      const models = await listProviderModels(info, apiKey);
+      const models = await listProviderModels(info, effectiveKey);
       return models;
     } catch (e) {
       return reply.code(502).send({ error: `Failed to list models: ${(e as Error).message}`.slice(0, 400) });
@@ -256,7 +260,7 @@ export async function boxesRoutes(fastify: FastifyInstance) {
 
     try {
       const docRepo = createDocumentRepository(fastify.db);
-      const documentIds = await docRepo.getIdsByBox(id);
+      const documentIds = await docRepo.getIdsByBox(id, 'completed');
 
       const queryEmbedding = await generateEmbedding(query, safeEmbeddingModel(box.embeddingModel));
 
@@ -271,35 +275,53 @@ export async function boxesRoutes(fastify: FastifyInstance) {
         similarity: r.similarity,
       }));
 
-      // Golden rules: completed .md docs in this box guide how to use the info
-      const chunkRepo = createChunkRepository(fastify.db);
-      const boxDocs = await docRepo.listByBox(id, 100, 0);
-      const ruleDocs = boxDocs.filter(
-        (d) =>
-          d.status === 'completed' &&
-          (d.mimeType.includes('markdown') || d.originalName.endsWith('.md'))
+      const nodeRepo = createNodeRepository(fastify.db);
+      const edgeRepo = createEdgeRepository(fastify.db);
+      const entities = await nodeRepo.searchByEmbedding(id, queryEmbedding, 8);
+      const relations = await edgeRepo.findTouching(
+        id,
+        entities.map((entity) => entity.id),
+        24,
       );
-      let goldenRules: string | undefined;
-      if (ruleDocs.length > 0) {
-        const parts: string[] = [];
-        for (const ruleDoc of ruleDocs.slice(0, 5)) {
-          const chunks = await chunkRepo.findByDocumentId(ruleDoc.id);
-          const text = chunks
-            .sort((a, b) => a.chunkIndex - b.chunkIndex)
-            .map((c) => c.content)
-            .join('\n')
-            .slice(0, 2000);
-          if (text) parts.push(`--- ${ruleDoc.originalName} ---\n${text}`);
-        }
-        if (parts.length > 0) goldenRules = parts.join('\n\n').slice(0, 8000);
-      }
+      const relatedIds = [
+        ...new Set(relations.flatMap((relation) => [relation.sourceId, relation.targetId])),
+      ];
+      const relatedNodes = await nodeRepo.findByIds(relatedIds);
+      const entityById = new Map(
+        [...entities, ...relatedNodes].map((entity) => [entity.id, entity]),
+      );
+      const graphContext = [
+        entities.length > 0
+          ? `Entities:\n${entities
+              .map((entity) => `- ${entity.type}: ${entity.name}${entity.description ? ` — ${entity.description}` : ''}`)
+              .join('\n')}`
+          : '',
+        relations.length > 0
+          ? `Relations:\n${relations
+              .map((relation) => {
+                const source = entityById.get(relation.sourceId)?.name ?? relation.sourceId;
+                const target = entityById.get(relation.targetId)?.name ?? relation.targetId;
+                return `- ${source} —${relation.type}→ ${target}`;
+              })
+              .join('\n')}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n');
 
-      const { answer, model } = await generateAnswer(query, sources, safeAnswerModel(box.answerModel), goldenRules);
+      const { answer, model } = await generateAnswer(
+        query,
+        sources,
+        safeAnswerModel(box.answerModel),
+        graphContext || undefined,
+      );
 
       return reply.send({
         answer,
         model,
         sources,
+        entities: entities.map(({ embedding: _embedding, ...entity }) => entity),
+        relations,
         query,
         tookMs: Date.now() - startTime,
       });
@@ -307,5 +329,28 @@ export async function boxesRoutes(fastify: FastifyInstance) {
       fastify.log.error({ err: error }, 'Error answering:');
       return reply.code(500).send({ error: 'Internal server error' });
     }
+  });
+
+  fastify.post('/boxes/:id/graph/index', async (request: FastifyRequest, reply) => {
+    const { id } = request.params as { id: string };
+    const limit = Math.min(Math.max(Number((request.query as { limit?: string }).limit ?? 16), 1), 32);
+    const box = await boxRepo().findById(id);
+    if (!box) return reply.code(404).send({ error: 'Box not found' });
+
+    const nodeRepo = createNodeRepository(fastify.db);
+    const pending = await nodeRepo.listMissingEmbeddings(id, limit);
+    if (pending.length === 0) return reply.send({ embedded: 0, remaining: 0 });
+
+    const vectors = await generateEmbeddings(
+      pending.map((node) => `${node.type}: ${node.name}\n${node.description ?? ''}`),
+      safeEmbeddingModel(box.embeddingModel),
+    );
+    for (let index = 0; index < pending.length; index += 1) {
+      const vector = vectors[index];
+      if (!vector) continue;
+      await nodeRepo.update(pending[index].id, { embedding: JSON.stringify(vector) });
+    }
+    const remaining = await nodeRepo.countMissingEmbeddings(id);
+    return reply.send({ embedded: pending.length, remaining });
   });
 }

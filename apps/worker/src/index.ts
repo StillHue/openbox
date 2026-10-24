@@ -2,7 +2,7 @@ import { Worker } from "bullmq";
 import { Redis } from "ioredis";
 import {
   createDbClient,
-  initializeDatabase,
+  ensureLightragColumns,
   createIngestRepository,
   createNodeRepository,
   createEdgeRepository,
@@ -28,15 +28,17 @@ import { classifyDocument, calculateJudgeScore, type JudgeOutput } from "@openbo
 import {
   extractGraphFromChunks,
   deduplicateNodes,
-  resolveEdges,
-  generateNodeIds,
   type GraphExtraction,
+  type GraphEdge,
+  type GraphNode,
 } from "@openbox/graph-engine";
 import { unlinkSync, writeFileSync } from "fs";
 import { IngestJobData } from "@openbox/shared-types";
 
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3000";
+// Master key shared with the API (fly secret API_KEY). Sent on internal calls.
+const apiKey = process.env.API_KEY;
 const dbConfig = {
   connectionString:
     process.env.DATABASE_URL ??
@@ -59,7 +61,9 @@ const edgeRepo = createEdgeRepository(db);
 const boxRepo = createBoxRepository(db);
 
 async function downloadFile(documentId: string): Promise<Buffer> {
-  const response = await fetch(`${apiBaseUrl}/documents/${documentId}/file`);
+  const response = await fetch(`${apiBaseUrl}/documents/${documentId}/file`, {
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  });
   if (!response.ok) {
     throw new Error(
       `Failed to download file: ${response.status} ${response.statusText}`,
@@ -67,6 +71,101 @@ async function downloadFile(documentId: string): Promise<Buffer> {
   }
   const arrayBuffer = await response.arrayBuffer();
   return Buffer.from(arrayBuffer);
+}
+
+function entityKey(type: string, name: string) {
+  return `${type}:${name.trim().toLowerCase().replace(/\s+/g, " ")}`;
+}
+
+async function mergeGraphIntoBox(input: {
+  boxId: string | null;
+  documentId: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  embeddingModel: string;
+}) {
+  const idByKey = new Map<string, string>();
+  const toEmbed: Array<{ id: string; text: string }> = [];
+
+  for (const node of input.nodes) {
+    const description = (node.description ?? "").slice(0, 1500);
+    const key = entityKey(node.type, node.name);
+    if (input.boxId) {
+      const existing = await nodeRepo.findInBox(input.boxId, node.type, node.name);
+      if (existing) {
+        const mergedDescription =
+          existing.description && description && !existing.description.includes(description)
+            ? `${existing.description}\n${description}`.slice(0, 1500)
+            : existing.description || description;
+        const properties = (existing.properties ?? {}) as Record<string, unknown>;
+        const currentSources = Array.isArray(properties.sourceDocumentIds)
+          ? properties.sourceDocumentIds.filter((value): value is string => typeof value === "string")
+          : [];
+        await nodeRepo.update(existing.id, {
+          description: mergedDescription,
+          properties: {
+            ...properties,
+            sourceDocumentIds: [...new Set([...currentSources, input.documentId])],
+          },
+        });
+        idByKey.set(key, existing.id);
+        toEmbed.push({ id: existing.id, text: `${node.type}: ${node.name}\n${mergedDescription}` });
+        continue;
+      }
+    }
+
+    const [created] = await nodeRepo.createMany([
+      {
+        documentId: input.documentId,
+        boxId: input.boxId,
+        type: node.type,
+        name: node.name,
+        description,
+        properties: { sourceDocumentIds: [input.documentId] },
+        confidence: node.confidence,
+      },
+    ]);
+    if (!created) continue;
+    idByKey.set(key, created.id);
+    toEmbed.push({ id: created.id, text: `${node.type}: ${node.name}\n${description}` });
+  }
+
+  if (toEmbed.length > 0) {
+    const vectors = await generateEmbeddings(
+      toEmbed.map((item) => item.text),
+      input.embeddingModel,
+    );
+    for (let index = 0; index < toEmbed.length; index += 1) {
+      const vector = vectors[index];
+      if (!vector) continue;
+      await nodeRepo.update(toEmbed[index].id, { embedding: JSON.stringify(vector) });
+    }
+  }
+
+  let edges = 0;
+  for (const edge of input.edges) {
+    const sourceId = idByKey.get(entityKey(edge.sourceType, edge.sourceName));
+    const targetId = idByKey.get(entityKey(edge.targetType, edge.targetName));
+    if (!sourceId || !targetId || sourceId === targetId) continue;
+    if (input.boxId) {
+      const existing = await edgeRepo.findInBox(input.boxId, sourceId, targetId, edge.type);
+      if (existing) continue;
+    }
+    await edgeRepo.createMany([
+      {
+        documentId: input.documentId,
+        boxId: input.boxId,
+        sourceId,
+        targetId,
+        type: edge.type,
+        properties: edge.properties ?? {},
+        confidence: edge.confidence,
+      },
+    ]);
+    edges += 1;
+  }
+
+  return { nodes: idByKey.size, edges };
 }
 
 async function processIngestJob(jobData: IngestJobData) {
@@ -87,8 +186,6 @@ async function processIngestJob(jobData: IngestJobData) {
     await ingestRepo.updateDocumentStatus(documentId, "processing");
 
     // Resolve the box's models (falls back to defaults).
-    // NOTE: NVIDIA chat is not invokable on this account yet, so the
-    // pipeline chat steps always use a supported Mistral model.
     let embeddingModel = DEFAULT_EMBEDDING_MODEL;
     let answerModel = DEFAULT_ANSWER_MODEL;
     let judgeModel = DEFAULT_JUDGE_MODEL;
@@ -148,6 +245,17 @@ async function processIngestJob(jobData: IngestJobData) {
       judgeOutput,
     );
 
+    if (!judgeOutput.shouldIndex) {
+      await ingestRepo.updateDocumentStatus(documentId, "rejected", judgeScore, judgeOutput);
+      try {
+        unlinkSync(tempFilePath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      console.log(`Document ${documentId} rejected by judge; nothing indexed`);
+      return { success: true, chunksProcessed: 0, nodesProcessed: 0, edgesProcessed: 0 };
+    }
+
     // 3. Chunk markdown
     console.log("Chunking markdown...");
     const chunkResults = await chunkMarkdown(markdown);
@@ -169,53 +277,15 @@ async function processIngestJob(jobData: IngestJobData) {
       `Extracted ${graphExtraction.nodes.length} nodes, ${graphExtraction.edges.length} edges`,
     );
 
-    // Deduplicate nodes and generate IDs
     const dedupedNodes = deduplicateNodes(graphExtraction.nodes);
-    const nodesWithIds = generateNodeIds(dedupedNodes);
-    console.log(`Deduplicated to ${nodesWithIds.length} unique nodes`);
-
-    // 5. Save nodes
-    console.log("Saving nodes to database...");
-    const newNodes: Array<{
-      documentId: string;
-      type: string;
-      name: string;
-      description: string | undefined;
-      properties: Record<string, unknown>;
-      confidence: number;
-    }> = nodesWithIds.map((n) => ({
+    const merged = await mergeGraphIntoBox({
+      boxId: doc?.boxId ?? null,
       documentId,
-      type: n.type,
-      name: n.name,
-      description: n.description,
-      properties: n.properties ?? {},
-      confidence: n.confidence,
-    }));
-    await nodeRepo.createMany(newNodes);
-    console.log(`Saved ${newNodes.length} nodes`);
-
-    // 6. Resolve and save edges
-    console.log("Resolving and saving edges...");
-    const resolvedEdges = resolveEdges(nodesWithIds, graphExtraction.edges);
-    console.log(`Resolved ${resolvedEdges.length} edges`);
-
-    const newEdges: Array<{
-      documentId: string;
-      sourceId: string;
-      targetId: string;
-      type: string;
-      properties: Record<string, unknown>;
-      confidence: number;
-    }> = resolvedEdges.map((e) => ({
-      documentId,
-      sourceId: e.sourceId,
-      targetId: e.targetId,
-      type: e.edge.type,
-      properties: e.edge.properties ?? {},
-      confidence: e.edge.confidence,
-    }));
-    await edgeRepo.createMany(newEdges);
-    console.log(`Saved ${newEdges.length} edges`);
+      nodes: dedupedNodes,
+      edges: graphExtraction.edges,
+      embeddingModel,
+    });
+    console.log(`Merged ${merged.nodes} entities and ${merged.edges} relations into the box`);
 
     // 7. Generate embeddings for chunks
     console.log(`Generating embeddings with ${embeddingModel}...`);
@@ -242,9 +312,7 @@ async function processIngestJob(jobData: IngestJobData) {
     // 9. Update final status
     // Use 'rejected' when judge says not to index (pipeline succeeded but content rejected)
     // Use 'failed' only for actual processing errors
-    const finalStatus = judgeOutput.shouldIndex
-      ? "completed"
-      : "rejectedrejected";
+    const finalStatus = "completed";
     await ingestRepo.updateDocumentStatus(
       documentId,
       finalStatus,
@@ -266,8 +334,8 @@ async function processIngestJob(jobData: IngestJobData) {
     return {
       success: true,
       chunksProcessed: chunkResults.length,
-      nodesProcessed: newNodes.length,
-      edgesProcessed: newEdges.length,
+      nodesProcessed: merged.nodes,
+      edgesProcessed: merged.edges,
     };
   } catch (error) {
     console.error(`Error processing document ${documentId}:`, error);
@@ -286,9 +354,15 @@ async function processIngestJob(jobData: IngestJobData) {
   }
 }
 
+const graphReady = ensureLightragColumns(db).catch((error) => {
+  console.error("Failed to ensure graph columns:", error);
+  throw error;
+});
+
 const worker = new Worker(
   "ingest",
   async (job) => {
+    await graphReady;
     const data = job.data as IngestJobData;
     return processIngestJob(data);
   },

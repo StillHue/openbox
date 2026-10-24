@@ -12,6 +12,7 @@ import {
   Plus,
   Trash,
   Graph,
+  ArrowClockwise,
 } from "@phosphor-icons/react";
 import {
   useBox,
@@ -20,7 +21,10 @@ import {
   useModelCatalog,
   useAskBox,
   useDeleteDocument,
+  useReprocessDocument,
 } from "@/hooks/useApi";
+import { toast, errorMessage } from "@/lib/toast";
+import { unwrapJsonAnswer } from "@/lib/answers";
 import { UploadDialog } from "@/components/upload-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,6 +60,7 @@ export default function BoxDetailPage() {
   const updateMutation = useUpdateBox();
   const askMutation = useAskBox();
   const deleteDocMutation = useDeleteDocument();
+  const reprocessMutation = useReprocessDocument();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -101,12 +106,32 @@ export default function BoxDetailPage() {
 
   const handleSave = async () => {
     try {
-      await updateMutation.mutateAsync({
-        id: boxId,
-        data: { name, description, embeddingModel, answerModel, judgeModel },
+      await toast.promise(
+        updateMutation.mutateAsync({
+          id: boxId,
+          data: { name, description, embeddingModel, answerModel, judgeModel },
+        }),
+        {
+          loading: { title: "Salvando box…" },
+          success: "Box atualizado.",
+          error: (e) => errorMessage(e),
+        },
+      );
+    } catch {
+      // The toast already carries the message; nothing else to do here.
+    }
+  };
+
+  const handleReprocessDoc = async (id: string, name: string) => {
+    try {
+      await toast.promise(reprocessMutation.mutateAsync(id), {
+        loading: { title: `Reprocessando "${name}"…` },
+        success: `"${name}" voltou pra fila de ingestão.`,
+        error: (e) => errorMessage(e),
       });
-    } catch (e) {
-      console.error("Save failed:", e);
+      refetchDocuments();
+    } catch {
+      // Reported by the toast.
     }
   };
 
@@ -117,10 +142,14 @@ export default function BoxDetailPage() {
       )
     ) {
       try {
-        await deleteDocMutation.mutateAsync(id);
+        await toast.promise(deleteDocMutation.mutateAsync(id), {
+          loading: { title: `Deletando "${name}"…` },
+          success: `"${name}" removida deste box.`,
+          error: (e) => errorMessage(e),
+        });
         refetchDocuments();
-      } catch (e) {
-        console.error("Delete failed:", e);
+      } catch {
+        // Reported by the toast.
       }
     }
   };
@@ -129,14 +158,18 @@ export default function BoxDetailPage() {
     e.preventDefault();
     if (!question.trim() || askMutation.isPending) return;
     try {
-      const res = await askMutation.mutateAsync({
-        boxId,
-        query: question,
-        topK: 5,
-      });
+      const res = await toast.promise(
+        askMutation.mutateAsync({ boxId, query: question, topK: 5 }),
+        {
+          loading: { title: "Consultando o box…", description: question.slice(0, 90) },
+          success: (r) =>
+            `Resposta pronta a partir de ${r.sources?.length ?? 0} trecho(s).`,
+          error: (err) => errorMessage(err),
+        },
+      );
       setLastAsk(res);
-    } catch (e) {
-      console.error("Ask failed:", e);
+    } catch {
+      // Reported by the toast.
     }
   };
 
@@ -334,7 +367,20 @@ export default function BoxDetailPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="h-8 w-8 text-muted-foreground"
+                        title="Reprocessar"
+                        disabled={reprocessMutation.isPending}
+                        onClick={() =>
+                          handleReprocessDoc(doc.id, doc.originalName)
+                        }
+                      >
+                        <ArrowClockwise className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         className="h-8 w-8 text-destructive"
+                        title="Deletar"
                         onClick={() =>
                           handleDeleteDoc(doc.id, doc.originalName)
                         }
@@ -381,7 +427,7 @@ export default function BoxDetailPage() {
               {lastAsk && (
                 <div className="space-y-3 p-4 border rounded-lg">
                   <p className="whitespace-pre-wrap text-sm">
-                    {lastAsk.answer}
+                    {unwrapJsonAnswer(lastAsk.answer)}
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {lastAsk.sources.map((s, i) => (

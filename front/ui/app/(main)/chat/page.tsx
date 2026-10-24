@@ -8,6 +8,8 @@ import {
   User,
 } from "@phosphor-icons/react";
 import { useQuerySearch, useBoxes, useAskBox } from "@/hooks/useApi";
+import { toast, errorMessage as describeError } from "@/lib/toast";
+import { unwrapJsonAnswer } from "@/lib/answers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -106,7 +108,7 @@ export default function ChatPage() {
         });
         assistantMessage = {
           role: "assistant",
-          content: response.answer,
+          content: unwrapJsonAnswer(response.answer),
           id: (Date.now() + 1).toString(),
           meta:
             response.sources.length > 0
@@ -117,12 +119,19 @@ export default function ChatPage() {
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      const errorMessage: ChatMessage = {
+      // Keep the inline bubble (so the transcript stays coherent) and also
+      // surface the real reason — "try again" alone hides 500s and bad models.
+      const failure: ChatMessage = {
         role: "assistant",
-        content: "Sorry, I encountered an error. Please try again.",
+        content: `Não consegui responder: ${describeError(error)}`,
         id: (Date.now() + 1).toString(),
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, failure]);
+      toast.add({
+        title: "Consulta falhou",
+        description: describeError(error),
+        type: "error",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -187,7 +196,7 @@ export default function ChatPage() {
                           align={message.role === "user" ? "end" : "start"}
                         >
                           <MessageAvatar>
-                            <Avatar className="size-8">
+                            <Avatar size="sm">
                               <AvatarFallback>
                                 {message.role === "user" ? (
                                   <User className="size-4" />
@@ -222,7 +231,7 @@ export default function ChatPage() {
                       >
                         <Message align="start">
                           <MessageAvatar>
-                            <Avatar className="size-8">
+                            <Avatar size="sm">
                               <AvatarFallback>
                                 <CircleNotch className="size-4 animate-spin" />
                               </AvatarFallback>

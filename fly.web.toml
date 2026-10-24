@@ -1,0 +1,31 @@
+# Fly config for the OpenBox frontend.
+#
+# Build context is the monorepo ROOT (front/ui/Dockerfile copies the whole
+# workspace so `pnpm install` can resolve the workspace graph), so this file
+# lives at the root and is selected explicitly:
+#
+#   flyctl deploy -c fly.web.toml --dockerfile front/ui/Dockerfile
+#
+# The frontend proxies /api/* to the API app through the rewrite in
+# front/ui/next.config.js, so NEXT_PUBLIC_API_URL points at the API host.
+app = "openbox-web"
+primary_region = "gru"
+
+[build]
+  dockerfile = "front/ui/Dockerfile"
+
+[env]
+  PORT = "3000"
+  HOST = "0.0.0.0"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

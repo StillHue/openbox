@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "@phosphor-icons/react";
+import { ArrowLeft, Crosshair } from "@phosphor-icons/react";
 import { useParams } from "next/navigation";
 import { useGraph, useSearchNodes } from "@/hooks/useApi";
 import { Button } from "@/components/ui/button";
@@ -27,10 +27,20 @@ import {
 } from "@/components/ui/select";
 import dynamic from "next/dynamic";
 import type { Node } from "@/types";
+import type { SigmaGraphHandle } from "@/components/SigmaGraph";
 
-const CytoscapeComponent = dynamic(() => import("react-cytoscapejs"), {
-  ssr: false,
-}) as any;
+const SigmaGraph = dynamic(
+  () => import("@/components/SigmaGraph").then((m) => m.SigmaGraph),
+  { ssr: false },
+);
+
+const TYPE_COLORS: Record<string, string> = {
+  Person: "#60a5fa",
+  Organization: "#34d399",
+  Location: "#fbbf24",
+  Concept: "#a78bfa",
+  Event: "#f472b6",
+};
 
 export default function GraphPage() {
   const params = useParams();
@@ -39,12 +49,36 @@ export default function GraphPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [searchType, setSearchType] = useState<string>("all");
+  const graphRef = useRef<SigmaGraphHandle>(null);
 
   const { data: searchResults } = useSearchNodes(
     documentId,
     searchQuery,
     searchType === "all" ? undefined : searchType,
     20,
+  );
+
+  const sigmaNodes = useMemo(
+    () =>
+      (graph?.nodes ?? []).map((node) => ({
+        id: node.id,
+        label: node.name || `Node ${node.id.slice(0, 8)}`,
+        color: TYPE_COLORS[node.type] ?? "#a78bfa",
+        data: node,
+      })),
+    [graph],
+  );
+
+  const sigmaEdges = useMemo(
+    () =>
+      (graph?.edges ?? []).map((edge) => ({
+        id: edge.id,
+        source: edge.sourceId,
+        target: edge.targetId,
+        label: edge.type,
+        color: edge.type === "reference" ? "#3b82f6" : "#8b5cf6",
+      })),
+    [graph],
   );
 
   if (isLoading) {
@@ -89,79 +123,7 @@ export default function GraphPage() {
     );
   }
 
-  const handleNodeClick = (event: any) => {
-    if (event.target === event.cyTarget) {
-      const node = event.target as any;
-      setSelectedNode(node.id());
-    }
-  };
-
-  const cyStyles: any[] = [
-    {
-      selector: "node",
-      style: {
-        label: "data(name)",
-        "text-valign": "center",
-        "text-halign": "center",
-        "background-color": "#18181b",
-        color: "#fafafa",
-        "border-color": "#3f3f46",
-        "border-width": "1px",
-      },
-    },
-    {
-      selector: "node[?type]",
-      style: {
-        shape: "data(shape)",
-      },
-    },
-    {
-      selector: "node:selected",
-      style: {
-        "border-color": "#000000",
-        "border-width": "2px",
-      },
-    },
-    {
-      selector: "edge",
-      style: {
-        width: 2,
-        "line-color": "#71717a",
-        "curve-style": "bezier",
-      },
-    },
-    {
-      selector: "edge[?type]",
-      style: {
-        "line-color": "data(color)",
-      },
-    },
-  ];
-
-  const cyElements: any[] = [
-    ...(graph.nodes || []).map((node) => ({
-      data: {
-        id: node.id,
-        name: node.name || `Node ${node.id.slice(0, 8)}`,
-        type: node.type,
-        shape: node.type === "entity" ? "rectangle" : "ellipse",
-        confidence: node.confidence,
-        description: node.description,
-      },
-    })),
-    ...(graph.edges || []).map((edge) => ({
-      data: {
-        id: edge.id,
-        source: edge.sourceId,
-        target: edge.targetId,
-        type: edge.type,
-        confidence: edge.confidence,
-        color: edge.type === "reference" ? "#3b82f6" : "#8b5cf6",
-      },
-    })),
-  ];
-
-  const selectedNodeData = graph.nodes?.find((n) => n.id === selectedNode);
+  const selectedNodeData = graph?.nodes?.find((n) => n.id === selectedNode);
 
   return (
     <div className="space-y-6">
@@ -204,10 +166,23 @@ export default function GraphPage() {
 
         <Card className="lg:col-span-3">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Graph Explorer</CardTitle>
-            <CardDescription>
-              Interactive knowledge graph of document entities and relationships
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Graph Explorer</CardTitle>
+                <CardDescription>
+                  Interactive knowledge graph of document entities and relationships
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => graphRef.current?.fit()}
+                title="Fit graph to view"
+              >
+                <Crosshair className="w-4 h-4" />
+                Recenter
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="graph" className="w-full">
@@ -216,13 +191,13 @@ export default function GraphPage() {
                 <TabsTrigger value="search">Search</TabsTrigger>
               </TabsList>
               <TabsContent value="graph" className="mt-4">
-                <div className="h-[600px] w-full rounded-lg border">
-                  <CytoscapeComponent
-                    elements={cyElements}
-                    cyStyle={cyStyles}
-                    style={{ width: "100%", height: "100%" }}
-                    layout={{ name: "cose-bilkent" }}
-                    onTap={handleNodeClick}
+                <div className="h-[600px] w-full rounded-lg border overflow-hidden">
+                  <SigmaGraph
+                    ref={graphRef}
+                    nodes={sigmaNodes}
+                    edges={sigmaEdges}
+                    onSelect={setSelectedNode}
+                    selectedId={selectedNode}
                   />
                 </div>
               </TabsContent>

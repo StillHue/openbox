@@ -236,3 +236,34 @@ export interface BoxGraph {
   nodes: BoxGraphNode[];
   edges: BoxGraphEdge[];
 }
+
+export interface ApiKeyInfo {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface CreateApiKeyResponse extends ApiKeyInfo {
+  /** Plaintext key — returned once, cannot be recovered later. */
+  key: string;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
+export interface AuthLoginResponse {
+  ok: boolean;
+  token?: string;
+  user?: AuthUser;
+  error?: string;
+}
+
+export interface AuthStatusResponse {
+  setupRequired: boolean;
+}

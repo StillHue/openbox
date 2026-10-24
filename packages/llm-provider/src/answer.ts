@@ -24,13 +24,14 @@ const SYSTEM_PROMPT = `You are a helpful assistant answering questions using the
 Rules:
 - Answer ONLY based on the excerpts. If the excerpts do not contain the answer, say so clearly.
 - Cite sources inline like [1], [2] matching the excerpt numbers.
-- Be concise and direct. Respond in the same language as the question.`;
+- Be concise and direct. Respond in the same language as the question.
+- Reply with plain prose text only. Never wrap the answer in JSON, code fences, or quotes.`;
 
 export async function generateAnswer(
   query: string,
   sources: AnswerSource[],
   modelId: string = DEFAULT_ANSWER_MODEL,
-  goldenRules?: string
+  graphContext?: string
 ): Promise<GeneratedAnswer> {
   const info = getAnswerModelInfo(modelId);
 
@@ -45,10 +46,10 @@ export async function generateAnswer(
   const context = sources
     .map((s, i) => `[${i + 1}] (from "${s.documentName}")\n${s.content}`)
     .join('\n\n');
-  const rulesSection = goldenRules
-    ? `Golden rules (always follow these when answering):\n${goldenRules}\n\n`
+  const graphSection = graphContext
+    ? `Knowledge graph context (use it to connect the excerpts; the excerpts remain the evidence):\n${graphContext}\n\n`
     : '';
-  const prompt = `${rulesSection}Excerpts:\n${context}\n\nQuestion: ${query}`;
+  const prompt = `${graphSection}Excerpts:\n${context}\n\nQuestion: ${query}`;
 
   const result = await generateText({
     model: resolveChatModel(info.id),
@@ -57,7 +58,7 @@ export async function generateAnswer(
   });
 
   return {
-    answer: result.text,
+    answer: unwrapJsonAnswer(result.text),
     model: info.id,
     usage: {
       promptTokens: result.usage.promptTokens,
@@ -65,4 +66,16 @@ export async function generateAnswer(
       totalTokens: result.usage.totalTokens,
     },
   };
+}
+
+/** Models sometimes wrap the answer in JSON like {"answer": "..."}. Unwrap it. */
+function unwrapJsonAnswer(text: string): string {
+  const trimmed = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+  if (!trimmed.startsWith('{')) return text;
+  try {
+    const parsed = JSON.parse(trimmed) as { answer?: unknown };
+    return typeof parsed.answer === 'string' ? parsed.answer : text;
+  } catch {
+    return text;
+  }
 }

@@ -28,15 +28,6 @@ export interface DynamicProvider {
 
 export const DYNAMIC_PROVIDERS: DynamicProvider[] = [
   {
-    id: 'openrouter',
-    label: 'OpenRouter (multi-vendor)',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    keyEnv: 'OPENROUTER_API_KEY',
-    docsUrl: 'https://openrouter.ai/settings/keys',
-    publicListing: true,
-    listingKind: 'openai',
-  },
-  {
     id: 'nvidia',
     label: 'NVIDIA NIM',
     baseUrl: 'https://integrate.api.nvidia.com/v1',

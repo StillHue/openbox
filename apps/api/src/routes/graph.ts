@@ -11,17 +11,17 @@ declare module 'fastify' {
 const nodeQuerySchema = z.object({
   query: z.string().min(1).max(200),
   type: z.string().optional(),
-  limit: z.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 const neighborsSchema = z.object({
-  depth: z.number().int().min(1).max(3).default(1),
+  depth: z.coerce.number().int().min(1).max(3).default(1),
 });
 
 const pathsSchema = z.object({
   source: z.string().uuid(),
   target: z.string().uuid(),
-  maxDepth: z.number().int().min(1).max(5).default(3),
+  maxDepth: z.coerce.number().int().min(1).max(5).default(3),
 });
 
 export async function graphRoutes(fastify: FastifyInstance) {

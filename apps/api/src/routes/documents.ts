@@ -1,8 +1,26 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { fileTypeFromBuffer } from 'file-type';
 import { IngestJobData } from '@openbox/shared-types';
-import { createIngestRepository, createBoxRepository } from '@openbox/db';
+import { createIngestRepository, createBoxRepository, createNodeRepository, createEdgeRepository, createChunkRepository } from '@openbox/db';
 import * as fs from 'fs';
+
+// Allowed MIME types for upload
+const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/markdown',
+]);
+
+// Maximum file size (50MB)
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+// Sanitize filename to prevent path traversal
+function sanitizeFilename(filename: string): string {
+  // Remove any path traversal characters
+  return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
 
 const logger = {
   info: (msg: string, meta?: Record<string, unknown>) => console.log(JSON.stringify({ level: 'info', msg, ...meta, time: new Date().toISOString() })),
@@ -27,8 +45,30 @@ export async function documentsRoutes(fastify: FastifyInstance) {
         }
 
         // Validate file
-        const { filename, mimetype, encoding } = data;
+        const { filename, mimetype } = data;
         const buffer = await data.toBuffer();
+        
+        // SECURITY: Check file size
+        if (buffer.length > MAX_FILE_SIZE) {
+          return reply.code(413).send({ error: 'File too large. Maximum size is 50MB' });
+        }
+        
+        // SECURITY: Validate MIME type using magic bytes (more reliable than client-provided mime)
+        const fileType = await fileTypeFromBuffer(buffer);
+        const detectedMime = fileType?.mime ?? mimetype;
+        
+        if (!ALLOWED_MIME_TYPES.has(detectedMime)) {
+          return reply.code(400).send({ 
+            error: 'Unsupported file type. Allowed: PDF, DOCX, TXT, MD',
+            detected: detectedMime
+          });
+        }
+        
+        // SECURITY: Sanitize filename to prevent path traversal
+        const sanitizedFilename = sanitizeFilename(filename);
+        
+        // Use detected MIME type (more accurate) or fallback to provided
+        const mimeType = fileType ? fileType.mime : mimetype;
 
         // Create document record first so the id is known
         const ingestRepo = createIngestRepository(fastify.db);
@@ -45,16 +85,16 @@ export async function documentsRoutes(fastify: FastifyInstance) {
 
         const document = await ingestRepo.createDocument({
           boxId: boxIdValue,
-          filename,
-          originalName: filename,
-          mimeType: mimetype,
+          filename: sanitizedFilename,
+          originalName: filename,  // Keep original for display
+          mimeType: mimeType,
           status: 'pending',
         });
 
         // Save file where GET /documents/:id/file expects it
         // (matches the /tmp/uploads volume mount on Fly)
         fs.mkdirSync('/tmp/uploads', { recursive: true });
-        const tempFilePath = `/tmp/uploads/${document.id}-${filename}`;
+        const tempFilePath = `/tmp/uploads/${document.id}-${sanitizedFilename}`;
         fs.writeFileSync(tempFilePath, buffer);
 
         // Enqueue ingestion job
@@ -62,7 +102,7 @@ export async function documentsRoutes(fastify: FastifyInstance) {
         const jobData: IngestJobData = {
           documentId: document.id,
           filePath: tempFilePath,
-          mimeType: mimetype,
+          mimeType: mimeType,
           originalName: filename,
         };
 
@@ -161,6 +201,51 @@ export async function documentsRoutes(fastify: FastifyInstance) {
         return reply.code(204).send();
       } catch (error) {
         logger.error('Error deleting document:', { error: String(error) });
+        return reply.code(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  // Requeue a failed (or stuck) document for ingestion.
+  // Requires the original file to still be on disk (/tmp/uploads volume).
+  fastify.post(
+    '/documents/:id/reprocess',
+    async (request: FastifyRequest, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const ingestRepo = createIngestRepository(fastify.db);
+        const document = await ingestRepo.getDocument(id);
+
+        if (!document) {
+          return reply.code(404).send({ error: 'Document not found' });
+        }
+
+        const filePath = `/tmp/uploads/${id}-${document.filename}`;
+        if (!fs.existsSync(filePath)) {
+          return reply.code(409).send({ error: 'Original file no longer on disk — re-upload the document' });
+        }
+
+        // Clear partial results from the previous attempt (edges before nodes: FK)
+        await createEdgeRepository(fastify.db).deleteByDocumentId(id);
+        await createNodeRepository(fastify.db).deleteByDocumentId(id);
+        await createChunkRepository(fastify.db).deleteByDocumentId(id);
+        await ingestRepo.updateDocumentStatus(id, 'pending');
+
+        const jobData: IngestJobData = {
+          documentId: id,
+          filePath,
+          mimeType: document.mimeType,
+          originalName: document.originalName,
+        };
+        await fastify.queue.add('ingest', jobData, {
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 30000 },
+        });
+
+        logger.info(`Document requeued for reprocessing: ${id}`);
+        return reply.code(202).send({ documentId: id, status: 'pending' });
+      } catch (error) {
+        logger.error('Error reprocessing document:', { error: String(error) });
         return reply.code(500).send({ error: 'Internal server error' });
       }
     }

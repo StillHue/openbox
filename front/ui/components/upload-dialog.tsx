@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { toast, errorMessage } from "@/lib/toast";
 
 interface UploadDialogProps {
   open: boolean;
@@ -53,13 +54,18 @@ export function UploadDialog({ open, onClose, fixedBoxId, onUploaded }: UploadDi
 
   const handleUpload = async () => {
     if (!file) return;
+    const filename = file.name;
     try {
-      await uploadMutation.mutateAsync({ file, boxId: effectiveBoxId });
+      await toast.promise(uploadMutation.mutateAsync({ file, boxId: effectiveBoxId }), {
+        loading: { title: "Enviando documento…", description: filename },
+        success: `"${filename}" na fila de ingestão.`,
+        error: (e) => errorMessage(e),
+      });
       onClose();
       setFile(null);
       onUploaded?.();
-    } catch (error) {
-      console.error("Upload failed:", error);
+    } catch {
+      // Reported by the toast; keep the dialog open so a retry is one click.
     }
   };
 

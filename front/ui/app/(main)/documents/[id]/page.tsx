@@ -29,6 +29,25 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
+function getVectorInfo(embedding: string | null): {
+  dims: number;
+  preview: string;
+} | null {
+  if (!embedding) return null;
+  try {
+    const vec = JSON.parse(embedding) as unknown;
+    if (!Array.isArray(vec)) return null;
+    const dims = vec.length;
+    const preview = vec
+      .slice(0, 8)
+      .map((v) => (typeof v === "number" ? v.toFixed(4) : String(v)))
+      .join(", ");
+    return { dims, preview };
+  } catch {
+    return null;
+  }
+}
+
 export default function DocumentDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -271,6 +290,7 @@ export default function DocumentDetailPage() {
             <Tabs defaultValue="chunks" className="w-full">
               <TabsList>
                 <TabsTrigger value="chunks">Chunks</TabsTrigger>
+                <TabsTrigger value="vectors">Vectors</TabsTrigger>
                 <TabsTrigger value="metadata">Metadata</TabsTrigger>
               </TabsList>
               <TabsContent value="chunks" className="mt-4">
@@ -301,8 +321,48 @@ export default function DocumentDetailPage() {
                           ))}
                         </div>
                       )}
+                      {(() => {
+                        const info = getVectorInfo(chunk.embedding);
+                        return info ? (
+                          <details className="mt-2">
+                            <summary className="text-xs text-muted-foreground cursor-pointer">
+                              Vector: {info.dims} dims [{info.preview}, …]
+                            </summary>
+                          </details>
+                        ) : (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Sem vetor
+                          </p>
+                        );
+                      })()}
                     </div>
                   ))}
+                </div>
+              </TabsContent>
+              <TabsContent value="vectors" className="mt-4">
+                <div className="space-y-2">
+                  {document.chunks.map((chunk) => {
+                    const info = getVectorInfo(chunk.embedding);
+                    return (
+                      <div
+                        key={chunk.id}
+                        className="p-3 border rounded-lg text-xs"
+                      >
+                        <span className="font-medium">
+                          Chunk {chunk.chunkIndex + 1}:{" "}
+                        </span>
+                        {info ? (
+                          <span className="text-muted-foreground font-mono">
+                            {info.dims} dims [{info.preview}, …]
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Sem vetor
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </TabsContent>
               <TabsContent value="metadata" className="mt-4">

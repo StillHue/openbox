@@ -1,9 +1,14 @@
 import { Layout } from "@/components/Layout";
+import { AuthGuard } from "@/components/AuthGuard";
 
 export default function MainLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <Layout>{children}</Layout>;
+  return (
+    <Layout>
+      <AuthGuard>{children}</AuthGuard>
+    </Layout>
+  );
 }

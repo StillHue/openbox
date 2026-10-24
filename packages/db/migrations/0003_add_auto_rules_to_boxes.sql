@@ -1,0 +1,1 @@
+ALTER TABLE "boxes" ADD COLUMN "auto_rules" text NOT NULL DEFAULT 'off';

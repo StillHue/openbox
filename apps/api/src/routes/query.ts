@@ -43,7 +43,7 @@ export async function queryRoutes(fastify: FastifyInstance) {
             return reply.code(400).send({ error: 'Box not found' });
           }
           embeddingModel = safeEmbeddingModel(box.embeddingModel);
-          const boxDocumentIds = await createDocumentRepository(fastify.db).getIdsByBox(boxId);
+          const boxDocumentIds = await createDocumentRepository(fastify.db).getIdsByBox(boxId, "completed");
           scopedDocumentIds =
             documentIds !== undefined
               ? boxDocumentIds.filter((id) => documentIds.includes(id))

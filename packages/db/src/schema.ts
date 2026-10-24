@@ -70,15 +70,18 @@ export const nodes = pgTable(
     documentId: uuid('document_id')
       .references(() => documents.id, { onDelete: 'cascade' })
       .notNull(),
+    boxId: uuid('box_id').references(() => boxes.id, { onDelete: 'cascade' }),
     type: text('type').notNull(), // e.g., 'Person', 'Organization', 'Concept', 'Location', 'Event'
     name: text('name').notNull(),
     description: text('description'),
     properties: jsonb('properties').notNull().default({}),
     confidence: real('confidence').notNull().default(0.5),
+    embedding: text('embedding'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => ({
     documentIdIdx: index('nodes_document_id_idx').on(table.documentId),
+    boxIdIdx: index('nodes_box_id_idx').on(table.boxId),
     typeIdx: index('nodes_type_idx').on(table.type),
     nameIdx: index('nodes_name_idx').on(table.name),
   })
@@ -91,6 +94,7 @@ export const edges = pgTable(
     documentId: uuid('document_id')
       .references(() => documents.id, { onDelete: 'cascade' })
       .notNull(),
+    boxId: uuid('box_id').references(() => boxes.id, { onDelete: 'cascade' }),
     sourceId: uuid('source_id')
       .references(() => nodes.id, { onDelete: 'cascade' })
       .notNull(),
@@ -104,9 +108,38 @@ export const edges = pgTable(
   },
   (table) => ({
     documentIdIdx: index('edges_document_id_idx').on(table.documentId),
+    boxIdIdx: index('edges_box_id_idx').on(table.boxId),
     sourceIdIdx: index('edges_source_id_idx').on(table.sourceId),
     targetIdIdx: index('edges_target_id_idx').on(table.targetId),
     typeIdx: index('edges_type_idx').on(table.type),
+  })
+);
+
+// Local user accounts for email+password login (frontend sessions).
+// Passwords stored as scrypt hashes; sessions are stateless JWTs (HS256).
+export const users = pgTable('users', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').notNull().unique(),
+  name: text('name'),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// API keys for user auth (MCP clients, etc.). Only the sha256 hash is stored;
+// the plaintext key (obk_...) is returned once at creation time.
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    keyHash: text('key_hash').notNull().unique(),
+    keyPrefix: text('key_prefix').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    lastUsedAt: timestamp('last_used_at'),
+    revokedAt: timestamp('revoked_at'),
+  },
+  (table) => ({
+    keyHashIdx: index('api_keys_key_hash_idx').on(table.keyHash),
   })
 );
 
@@ -164,3 +197,7 @@ export type Node = typeof nodes.$inferSelect;
 export type NewNode = typeof nodes.$inferInsert;
 export type Edge = typeof edges.$inferSelect;
 export type NewEdge = typeof edges.$inferInsert;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;

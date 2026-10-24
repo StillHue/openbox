@@ -10,12 +10,11 @@ import { getAnswerModelInfo } from './models.js';
 import { getDynamicProvider, parseDynamicModelId } from './providers.js';
 
 const NIM_BASE_URL = process.env.NIM_BASE_URL ?? 'https://integrate.api.nvidia.com/v1';
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
-function apiKey(envName: 'NVIDIA_API_KEY' | 'OPENROUTER_API_KEY'): string {
-  const key = process.env[envName];
+function nvidiaApiKey(): string {
+  const key = process.env.NVIDIA_API_KEY;
   if (!key) {
-    throw new Error(`${envName} is not set`);
+    throw new Error('NVIDIA_API_KEY is not set');
   }
   return key;
 }
@@ -71,6 +70,7 @@ async function callOpenAiChat(
   baseURL: string,
   key: string,
   modelId: string,
+  jsonMode: boolean,
   options: LanguageModelV1CallOptions
 ): Promise<{ text: string; promptTokens: number; completionTokens: number; finishReason: LanguageModelV1FinishReason }> {
   const response = await fetch(`${baseURL}/chat/completions`, {
@@ -84,6 +84,10 @@ async function callOpenAiChat(
       messages: toOpenAiMessages(options.prompt),
       temperature: options.temperature ?? 0.1,
       ...(options.maxTokens != null ? { max_tokens: options.maxTokens } : {}),
+      // OpenAI-compatible servers that honour this return the JSON object
+      // directly instead of prose-wrapped-in-fences, which is what the
+      // `extractJson` fallbacks in judge/graph-engine are there to clean up.
+      ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
     }),
     signal: options.abortSignal,
   });
@@ -108,9 +112,10 @@ function createOpenAiChatModel(
   provider: string,
   baseURL: string,
   key: string,
-  modelId: string
+  modelId: string,
+  jsonMode: boolean
 ): LanguageModelV1 {
-  const call = (options: LanguageModelV1CallOptions) => callOpenAiChat(baseURL, key, modelId, options);
+  const call = (options: LanguageModelV1CallOptions) => callOpenAiChat(baseURL, key, modelId, jsonMode, options);
   return {
     specificationVersion: 'v1',
     provider,
@@ -172,14 +177,11 @@ export function resolveChatModel(modelId: string): LanguageModelV1 {
     if (!key) {
       throw new Error(`${provider.keyEnv} is not set (needed to chat with ${provider.label})`);
     }
-    return createOpenAiChatModel(provider.id, provider.baseUrl, key, dynamic.nativeId);
+    return createOpenAiChatModel(provider.id, provider.baseUrl, key, dynamic.nativeId, needsJsonTextMode(modelId));
   }
 
   if (info.provider === 'nvidia') {
-    return createOpenAiChatModel('nim', NIM_BASE_URL, apiKey('NVIDIA_API_KEY'), info.id);
-  }
-  if (info.provider === 'openrouter') {
-    return createOpenAiChatModel('openrouter', OPENROUTER_BASE_URL, apiKey('OPENROUTER_API_KEY'), info.id);
+    return createOpenAiChatModel('nim', NIM_BASE_URL, nvidiaApiKey(), info.id, needsJsonTextMode(modelId));
   }
   return mistral(info.id);
 }

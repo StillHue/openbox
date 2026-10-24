@@ -15,8 +15,8 @@ OpenBox is a monorepo for document ingestion, processing, and retrieval-augmente
 - **API**: Fastify
 - **Queue**: BullMQ + Redis
 - **Database**: PostgreSQL + pgvector
-- **Embeddings**: NVIDIA NIM (Nemotron 3 Embed 1B)
-- **Answers**: OpenRouter (Nemotron Lightning / Nano 30B)
+- **Embeddings**: NVIDIA NIM (Nemotron(Nemotron 33 EmbedEmbed 1B1B)
+- **Answers**: OpenRouterOpenRouter (NemotronNemotron LightningLightning // NanoNano 30B30B)
 - **Judging**: TypeSafe Jev or built-in classifier (per box)
 - **Document Processing**: mammoth (docx), unpdf (pdf), remark/unified (markdown parsing)
 - **UI**: Next.js (App Router) + shadcn/ui + Phosphor icons
@@ -48,7 +48,7 @@ openbox/
 - Node.js 20+
 - pnpm 11+
 - Docker & Docker Compose
-- NVIDIA API key (for embeddings)
+- API keyskeys for desired providers (set via environment variables or UIdesired providers (set via environment variables or UI)
 
 ### 1. Clone and Install
 
@@ -61,8 +61,7 @@ pnpm install
 
 ```bash
 cp .env.example .env
-# Edit .env and add your NVIDIA_API_KEY (embeddings),
-# OPENROUTER_API_KEY (answers) and JEV_API_KEY (judging)
+# Edit .env and add API keys for providers you plan to use (e.g.,API keys for providers you plan to use (e.g., NVIDIA_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY,GROQ_API_KEY, etc.etc.)
 ```
 
 ### 3. Start Services
@@ -159,6 +158,31 @@ Vector similarity search.
   ],
   "query": "search query",
   "tookMs": 45
+```
+
+### POST /providers/models
+Fetch a provider's model list (used in the Orchestration tab).
+
+**Request**:
+```json
+{
+  "provider": "openrouter",
+  "apiKey": "optional"
+}
+```
+
+**Response**:
+```json
+{
+  "provider": "openrouter",
+  "embed": [
+    { "id": "...", "label": "...", "type": "embed" },
+    ...
+  ],
+  "answer": [
+    { "id": "...", "label": "...", "type": "answer" },
+    ...
+  ]
 }
 ```
 
@@ -217,10 +241,17 @@ pnpm lint
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NVIDIA_API_KEY` | - | Required for embeddings (NVIDIA NIM) |
-| `OPENROUTER_API_KEY` | - | Required for answer models |
-| `JEV_API_KEY` | - | Required for Jev judging |
-| `MISTRAL_API_KEY` | - | Optional (Mistral answer fallback) |
+| `NVIDIA_API_KEY` | - | API key for NVIDIA NIM (embeddings, answers) |
+| `OPENROUTER_API_KEY` | - | API key for OpenRouter (answers) |
+| `GROQ_API_KEY` | - | API key for Groq (answers) |
+| `DEEPSEEK_API_KEY` | - | API key for DeepSeek (answers) |
+| `TOGETHER_API_KEY` | - | API key for Together AI (answers) |
+| `XAI_API_KEY` | - | API key for xAI (answers) |
+| `COHERE_API_KEY` | - | API key for Cohere (answers) |
+| `GEMINI_API_KEY` | - | API key for Google Gemini (answers) |
+| `FIREWORKS_API_KEY` | - | API key for Fireworks AI (answers) |
+| `JINA_API_KEY` | - | API key for Jina AI (embeddings) |
+| `JEV_API_KEY` | - | API key for Jev judging (if used) |
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/openbox` | PostgreSQL connection |
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection |
 | `PORT` | `3000` | API server port |
@@ -229,7 +260,7 @@ pnpm lint
 
 The **Settings → Orchestration** tab (account-level, not per box) lets you:
 
-- Select a provider (NVIDIA NIM, OpenRouter, TypeSafe Jev)
+- Select a provider (12+ providers including NVIDIA NIM, OpenRouter, Groq,Groq, Together, etc.Together, etc.)
 - Paste the provider API key (stored locally in the browser)
 - Pick default models for each role:
   - **Embedding** — vectorization of documents and queries

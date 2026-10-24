@@ -6,6 +6,7 @@ WORKDIR /app
 RUN npm install -g pnpm@11.1.2
 
 # Copy monorepo (respects .dockerignore)
+# lightrag retrieval: keep this line so the next image rebuilds from source
 COPY . .
 
 # Install all workspace deps (devDeps needed to build TS)

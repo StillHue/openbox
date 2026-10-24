@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { documentsApi, queryApi, graphApi, boxesApi, modelsApi } from '../services/api';
+import { documentsApi, queryApi, graphApi, boxesApi, modelsApi, apiKeysApi, authApi, saveOpenboxApiKey } from '../services/api';
 import type { QueryRequest, Document, DocumentListResponse, GraphResponse, Node, CreateBoxRequest, UpdateBoxRequest, BoxGraph } from '../types';
 
 // Helper to normalize API response - handles both array and object formats
@@ -169,5 +169,88 @@ export function useBoxGraph(id: string) {
     queryKey: ['boxGraph', id],
     queryFn: () => boxesApi.graph(id),
     enabled: !!id,
+  });
+}
+
+/**
+ * Live model list for a provider (embed + answer). Falls back to the server's
+ * own key for that provider, so it works without pasting one. The key, if
+ * supplied, is used transiently and never stored.
+ */
+export function useProviderModelList(provider: string | undefined, apiKey?: string) {
+  return useQuery({
+    queryKey: ['providerModels', provider ?? '', apiKey ?? ''],
+    queryFn: () => modelsApi.providerModels(provider as string, apiKey),
+    enabled: !!provider,
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useApiKeys() {
+  return useQuery({
+    queryKey: ['apiKeys'],
+    queryFn: () => apiKeysApi.list(),
+  });
+}
+
+export function useCreateApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => apiKeysApi.create(name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
+    },
+  });
+}
+
+export function useRevokeApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiKeysApi.revoke(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
+    },
+  });
+}
+
+/** The signed-in account, shared by the header menu and the Settings profile. */
+export function useReprocessDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => documentsApi.reprocess(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+  });
+}
+
+export function useCurrentUser() {
+  return useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: () => authApi.me(),
+    select: (data) => data.user ?? null,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string | null) => authApi.updateProfile(name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    },
+  });
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (input: { currentPassword: string; newPassword: string }) =>
+      authApi.changePassword(input.currentPassword, input.newPassword),
+    // The endpoint re-issues a token so the session survives the change.
+    onSuccess: (data) => {
+      if (data.token) saveOpenboxApiKey(data.token);
+    },
   });
 }

@@ -25,8 +25,7 @@ export interface AnswerModelInfo {
 }
 
 export const PROVIDERS: ProviderInfo[] = [
-  { id: 'nvidia', label: 'NVIDIA NIM', capabilities: ['embed'] },
-  { id: 'openrouter', label: 'OpenRouter', capabilities: ['answer'] },
+  { id: 'nvidia', label: 'NVIDIA NIM', capabilities: ['embed', 'answer'] },
   { id: 'typesafe', label: 'TypeSafe Jev', capabilities: ['judge'] },
   { id: 'openbox', label: 'OpenBox built-in', capabilities: ['judge'] },
 ];
@@ -41,13 +40,22 @@ export const EMBEDDING_MODELS: EmbeddingModelInfo[] = [
   },
 ];
 
+// Verified against the NVIDIA NIM account on 2026-09-30. Reasoning models
+// (nemotron-3-super, gpt-oss-20b, nemotron-4) burn the whole max_tokens budget
+// on `reasoning_content` and return `content: null`, which breaks structured
+// extraction — so the defaults below are non-reasoning chat models that were
+// confirmed to honour `response_format: json_object`.
+// Verified: llama-3.2-11b -> 11 nodes / 13 edges, gemma-4-31b -> 7/4,
+// kimi-k3 -> 8/8, glm-5.3-flash -> 10/9.
 export const ANSWER_MODELS: AnswerModelInfo[] = [
-  { id: 'nvidia/nemotron-3.5-lightning:free', label: 'Nemotron Lightning (free)', description: 'Fast NVIDIA reasoning model via OpenRouter', provider: 'openrouter' },
-  { id: 'nvidia/nemotron-3-nano-30b-a3b', label: 'Nemotron Nano 30B', description: 'Efficient NVIDIA model via OpenRouter', provider: 'openrouter' },
+  { id: 'nvidia:meta/llama-3.2-11b-vision-instruct', label: 'Llama 3.2 11B Instruct', description: 'Fastest non-reasoning model on the account; default', provider: 'nvidia' },
+  { id: 'nvidia:google/gemma-4-31b-it', label: 'Gemma 4 31B IT', description: 'Larger non-reasoning model, slower per call', provider: 'nvidia' },
+  { id: 'nvidia:moonshotai/kimi-k3', label: 'Kimi K3', description: 'Highest graph yield observed, highest latency (~60s)', provider: 'nvidia' },
+  { id: 'nvidia:z-ai/glm-5.3-flash', label: 'GLM 5.3 Flash', description: 'Small reasoning model, usable for chat but not for strict JSON budgets', provider: 'nvidia' },
 ];
 
 export const DEFAULT_EMBEDDING_MODEL = 'nemotron-3-embed-1b';
-export const DEFAULT_ANSWER_MODEL = 'nvidia/nemotron-3.5-lightning:free';
+export const DEFAULT_ANSWER_MODEL = 'nvidia:meta/llama-3.2-11b-vision-instruct';
 export const DEFAULT_JUDGE_MODEL = 'jev-latest';
 
 export interface JudgeModelInfo {
